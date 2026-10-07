@@ -2,7 +2,7 @@
 
 **World Awareness & State Display**
 
-WASD is a free, community-built live game companion.
+WASD is a free, community-driven live game companion.
 
 The first supported game is **Dark Souls III**, with support designed around Seamless Co-op on PC.
 
