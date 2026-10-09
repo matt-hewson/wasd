@@ -1,0 +1,37 @@
+# DS3 bosses: defeat flag, area, required/optional, note. No names here: the app shows the name the game puts on
+#   the boss's health bar, read from the user's own install (generated/boss_names.tsv).
+# Flag: the boss's defeat event flag (ids credited in data/THIRD_PARTY_NOTICES.md; 14000800 verified flipping live).
+# Area: where the boss stands in the game's map files (its enemy parts, entity flag - 10,000,000 + 0..9), by
+#   data/region_areas.tsv. The real-data suite checks it equals what the game's files give.
+# Status: required / optional (DLC bosses within their DLC). Checked against our own route (data/route.tsv, clean-data
+#   step 5.4): a boss that gates a main or DLC step must be required, every boss of an optional step optional
+#   (data test data_route_is_consistent). The ends of each part (Soul of Cinder, Sister Friede, Slave Knight Gael)
+#   are required; Curse-rotted Greatwood is optional though its area is on the main path.
+# Note: the DLC the boss belongs to, from its map (m45 Ashes of Ariandel; m50, m51 The Ringed City). The app counts
+#   DLC bosses apart by the "DLC" in it.
+# flag	area	status	note
+14000800	Cemetery of Ash	required
+13000800	High Wall of Lothric	required
+13100800	Undead Settlement	optional
+13300850	Road of Sacrifices	required
+13300800	Farron Keep	required
+13500800	Cathedral of the Deep	required
+13800800	Catacombs of Carthus	required
+13800830	Smouldering Lake	optional
+13700850	Irithyll of the Boreal Valley	required
+13900800	Profaned Capital	required
+13700800	Anor Londo	required
+13000890	High Wall of Lothric	required
+13010800	Lothric Castle	required
+13000830	Consumed King's Garden	optional
+14000830	Untended Graves	optional
+13410830	Grand Archives	required
+13200800	Archdragon Peak	optional
+13200850	Archdragon Peak	optional
+14100800	Kiln of the First Flame	required
+14500800	Painted World of Ariandel	required	DLC1: Ashes of Ariandel
+14500860	Painted World of Ariandel	optional	DLC1: Ashes of Ariandel
+15000800	The Dreg Heap	required	DLC2: The Ringed City
+15100800	The Ringed City	required	DLC2: The Ringed City
+15100850	The Ringed City	optional	DLC2: The Ringed City
+15110800	The Ringed City	required	DLC2: The Ringed City

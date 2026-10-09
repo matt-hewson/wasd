@@ -1,0 +1,55 @@
+# Missable content for missable-content warnings: NPC questline steps, missable items and
+# ending requirements. Derived from the game's own files: NPC questline states and the
+# conditions that move them come from the event scripts, what is said at each step from the talk scripts
+# (lines through TalkParam), items from ItemLotParam. Event-script instruction meanings: DarkScript3's DS3
+# instruction table, used for facts only (see THIRD_PARTY_NOTICES.md). All text below is our own.
+#
+# Flags: 8-digit event flags (boss kills from data/bosses.tsv, talk flags set by the talk scripts, pickup
+# flags from ItemLotParam +0x80); 4-digit flags are global flags: NPC questline states (one flag per step
+# of an NPC, set by the event scripts; e.g. 1137 = Sirris gone) and 9482 (Cuculus lived through the Old
+# Demon King fight).
+#
+# Columns: id <TAB> kind (npc / item / ending) <TAB> topic <TAB> area <TAB> relevant <TAB> trigger <TAB> done
+#          <TAB> short <TAB> do <TAB> lose
+#   relevant / trigger / done use the route.tsv condition syntax (space-separated groups, all must hold; '|'
+#   between alternatives; a flag or "Nof:flag,..."); "-" = always (relevant) or unknown (trigger, done).
+#   relevant: when the warning starts to apply; for NPC steps, that step or any later step of the NPC, so the
+#             entry stays to show done or missed.   trigger: when it's too late (the lockout).
+#   done: when the game itself shows it's handled. Otherwise the player marks it done on the live page.
+#   area: where the action happens (the overlay alerts there).   short: one line for the overlay.
+#
+# Siegward: his Yhorm step (state 1388) needs all four talk flags below and Yhorm alive; Yhorm dying first
+# gives the other end of his questline (1390).
+siegward-settlement	npc	Siegward	Undead Settlement	1of:1380,1382,1394	13900800	73100364	Toast with Siegward in the Undead Settlement	settlement -> help siegward in his fight, then share his toast. before yhorm dies	The rest of Siegward's questline and his help against Yhorm
+siegward-cathedral	npc	Siegward	Cathedral of the Deep	1of:1383,1384,1385,1386,1387,1388,1389,1390	13900800	73500105	Get Siegward's armour back	cathedral -> find siegward (he's lost his armour) and bring it back to him. before yhorm dies	The rest of Siegward's questline and his help against Yhorm
+siegward-irithyll	npc	Siegward	Irithyll of the Boreal Valley	1of:1385,1386,1387,1388,1389,1390	13900800	73700203	Share Siegward's soup in Irithyll	irithyll -> find siegward dozing by a fire, share his estus soup and toast. before yhorm dies	The rest of Siegward's questline and his help against Yhorm
+siegward-capital	npc	Siegward	Profaned Capital	1of:1386,1387,1388,1389,1390	13900800	73900152	Rescue Siegward in the Profaned Capital	capital -> rescue siegward and talk to him. before yhorm dies	The rest of Siegward's questline and his help against Yhorm
+# Sirris: after the Hodrick fight she asks to swear herself to you; the next new boss kill before you
+# accept ends her questline (1137). Joining Rosaria's Fingers ends it too (1133 / 1134).
+sirris-vow	npc	Sirris	Firelink Shrine	1of:1127,1128,1129,1130	1137	1128	Accept Sirris's vow	shrine -> after the hodrick fight, accept sirris's vow before you kill another boss	The end of Sirris's questline
+sirris-rosaria	npc	Sirris	Cathedral of the Deep	1of:1120,1121,1122,1123,1124,1125,1126,1127,1128,1129,1130,1133,1134	73500150	1129	Don't join Rosaria's Fingers	cathedral -> joining rosaria's fingers ends sirris's questline	Sirris's questline
+# Greirat: on his Irithyll trip he dies at your next boss kill (1218) unless Siegward is waiting in
+# Irithyll (Siegward 1385) or you told Patches where he went (Patches 1366); the Lothric trip always ends
+# in his death.
+greirat-irithyll	npc	Greirat	Firelink Shrine	1of:1203,1204,1205,1206,1207	1218	1206	Keep Greirat alive in Irithyll	shrine -> after sending greirat to irithyll, tell patches where he went (or have siegward in irithyll) before your next boss kill	Greirat, his ashes and what he'd bring back
+greirat-lothric	npc	Greirat	Firelink Shrine	1of:1206,1207	74000309	-	Don't send Greirat to Lothric	shrine -> greirat never comes back from lothric	Greirat, his ashes and what he'd bring back
+# Irina: buying any of her five dark miracles sets the dark path (1282); all ten other miracles and none of
+# the five give her other path (1286).
+irina-dark	npc	Irina	Firelink Shrine	1of:1281,1282,1283,1284,1285,1286	1of:73101710,73101720,73101730,73101740,73101750	1286	Irina: dark miracles pick her path	shrine -> buying any of irina's five dark miracles sets her dark path; buy all her others and none of those for the other path	The path you didn't take
+# Anri and the Londor wedding: when Wolnir dies, Horace found while still alive gives 1346 (no wedding);
+# not found, or found after he's dead, gives 1347. The wedding then needs Anri's Irithyll talk (after
+# Pontiff), Yuria's "thy spouse is ready" and the Sword of Avowal at the Darkmoon chamber; Anri dying first
+# gives 1567.
+anri-horace	npc	Anri	Catacombs of Carthus	1of:1345,1346,1347,1348,1349,1350,1351,1352,1353	1346	1347	Anri: Horace and the wedding	catacombs -> for anri's wedding, don't tell anri you found horace while he's alive before wolnir dies	Anri's wedding
+anri-wedding	npc	Anri	Anor Londo	1of:1564,1565,1566,1567	1567	1565	The wedding in Anor Londo	anor londo -> take the sword of avowal to the hidden darkmoon chamber	Anri's wedding
+# Yoel: dies once all his draws are used (1062), or at a point the game decides (engine flags 136 / 138,
+# not yet identified) never recruited (1063) or with draws left (1064).
+yoel-recruit	npc	Yoel	Undead Settlement	1of:1060,1061,1062,1063,1064	1063	1061	Recruit Yoel	settlement -> recruit yoel early: he dies unrecruited at a point the game decides	Yoel's draws
+yoel-draws	npc	Yoel	Firelink Shrine	1of:1061,1062,1064	1064	1062	Use all of Yoel's draws	shrine -> have yoel draw out your strength until he has none left: he dies with draws left at a point the game decides	Yoel's remaining draws
+# Cuculus: beating the Old Demon King with her summoned and alive sets 9482, which puts a corpse with
+# items (lots 3100950 / 3100100) in the Undead Settlement.
+cuculus-demon-king	item	Cuculus	Smouldering Lake	13300800	13800830	9482	Summon Cuculus against the Old Demon King	lake -> summon cuculus for the old demon king and keep her alive	A corpse with items in the Undead Settlement
+# Fire Keeper: the "give eyes" talk option shows while you hold the Eyes of a Fire Keeper (goods 2138; one
+# lot in Untended Graves, pickup flag 54000280); endings come after the Soul of Cinder.
+fire-keeper-eyes	ending	Fire Keeper	Firelink Shrine	54000280	14100800	74000122	Give the Fire Keeper her eyes	shrine -> give the fire keeper the eyes of a fire keeper before the soul of cinder	An ending
+fire-keeper-eyes-pickup	item	Fire Keeper	Untended Graves	13000830	14100800	54000280	Pick up the Eyes of a Fire Keeper	graves -> pick up the eyes of a fire keeper before the soul of cinder	The item for the Fire Keeper's ending

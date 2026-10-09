@@ -1,0 +1,41 @@
+# Route steps for route hints, in the order the game opens them.
+# Written for this project from our own knowledge of the game, in our own words; "way in" is terse: from -> do. The structure follows the game's
+#   own data: one step per area (the place names of data/region_areas.tsv), split only where the game gates part of
+#   an area behind a boss (the Dancer's return to High Wall; the Ringed City past Halflight, where Gael's fight is a
+#   map of its own, m51_01). Each step's bosses are where the game's map files put them (data/bosses.tsv's areas).
+# Facts kept: the boss defeat flags (data/bosses.tsv). The data tests check every flag, area and boss against the
+#   other tables, that every step can be reached, and that boss required / optional agrees with the gates.
+#
+# Columns: id <TAB> area <TAB> kind (main / optional / dlc) <TAB> needs <TAB> from <TAB> bosses <TAB> way in
+#   needs: space-separated groups, ALL must hold; a group is alternatives split by '|'; an alternative is a
+#          boss flag (defeated) or "Nof:flag,flag,..." (at least N of them defeated); "-" = open from the start.
+#   from:  the area the way in starts from ("-" for the first).
+#   bosses: defeat flags of this step's bosses, comma-separated ("-" for none). A step is done when all of
+#           them are defeated (optional bosses included); a step without bosses is done once it's open.
+#
+# Lords of Cinder: Abyss Watchers 13300800, Yhorm the Giant 13900800, Aldrich 13700800, the Twin Princes 13410830.
+# Killing Emma early also brings the Dancer forward; no flag for that is used here.
+cemetery	Cemetery of Ash	main	-	-	14000800	start -> kill Iudex Gundyr
+firelink	Firelink Shrine	main	14000800	Cemetery of Ash	-	cemetery -> through Iudex Gundyr's arena
+highwall	High Wall of Lothric	main	14000800	Firelink Shrine	13000800	shrine -> Coiled Sword in the bonfire, warp
+settlement	Undead Settlement	main	13000800	High Wall of Lothric	13100800	High Wall -> kill Vordt, Small Lothric Banner at the castle gate
+road	Road of Sacrifices	main	13000800	Undead Settlement	13300850	settlement -> out the far side
+cathedral	Cathedral of the Deep	main	13300850	Road of Sacrifices	13500800	road -> kill Crystal Sage
+farron	Farron Keep	main	13000800	Road of Sacrifices	13300800	road -> down into the swamp, put out the three flames
+carthus	Catacombs of Carthus	main	13300800	Farron Keep	13800800	keep -> kill Abyss Watchers
+lake	Smouldering Lake	optional	13300800	Catacombs of Carthus	13800830	catacombs -> cut the rope bridge, climb down
+irithyll	Irithyll of the Boreal Valley	main	13800800 13500800	Catacombs of Carthus	13700850	catacombs -> kill Wolnir, Small Doll at the bridge
+dungeon	Irithyll Dungeon	main	13800800 13500800	Irithyll of the Boreal Valley	-	Irithyll -> go down
+capital	Profaned Capital	main	13800800 13500800	Irithyll Dungeon	13900800	dungeon -> through its deepest part
+anorlondo	Anor Londo	main	13700850	Irithyll of the Boreal Valley	13700800	Irithyll -> kill Pontiff Sulyvahn
+dancer	High Wall of Lothric	main	3of:13300800,13900800,13700800,13410830	Firelink Shrine	13000890	shrine -> kill three Lords, back to the High Wall
+castle	Lothric Castle	main	13000890	High Wall of Lothric	13010800	High Wall -> kill the Dancer
+garden	Consumed King's Garden	optional	13000890	Lothric Castle	13000830	castle -> side path down
+graves	Untended Graves	optional	13000830	Consumed King's Garden	14000830	garden -> kill Oceiros, hidden wall
+archives	Grand Archives	main	13010800	Lothric Castle	13410830	castle -> kill Dragonslayer Armour, Grand Archives Key
+peak	Archdragon Peak	optional	13000890	Irithyll Dungeon	13200800,13200850	dungeon -> Path of the Dragon (from the garden) at the dragon statue
+kiln	Kiln of the First Flame	main	4of:13300800,13900800,13700800,13410830	Firelink Shrine	14100800	shrine -> four Lords' cinders on their thrones
+ariandel	Painted World of Ariandel	dlc	13300850	Cathedral of the Deep	14500800,14500860	Cleansing Chapel -> talk to Gael, touch the painting
+dreg	The Dreg Heap	dlc	4of:13300800,13900800,13700800,13410830|14500800	Kiln of the First Flame	15000800	kiln's ruined shrine, or Ariandel's chapel after Friede
+ringed	The Ringed City	dlc	15000800	The Dreg Heap	15100800,15100850	Dreg Heap -> Small Envoy Banner at the end
+gael	The Ringed City	dlc	15100800	The Ringed City	15110800	Ringed City -> kill Halflight, Church of Filianore

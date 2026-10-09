@@ -1,0 +1,26 @@
+# Everything build.ps1, test.ps1, release.ps1 and tools/fetch_python.ps1 make:
+# the exes, objects and resources, the test exe, the bundled Python, the
+# release build, old scan output. Run .\build.ps1 (or .\test.ps1, which
+# builds first) after a clone or a pull. Untracked 2026-10-07: committed
+# exes kept going stale next to the source and dirtied every build.
+# build/captures/ (dumps of the game's code) is ignored too: not ours to
+# publish.
+build/*
+
+# Installers (installer/wasd.iss, release.ps1)
+dist/
+
+# Personal play data and generated reports
+sessions/
+reports/
+
+# Generated locally from the user's own game files (tools/extract_treasures.py); not redistributable
+data/generated/
+__pycache__/
+
+# Per-user settings (spoiler tier)
+settings.ini
+
+# Per-user files in a dev checkout (AppPaths)
+scratch/
+logs/
