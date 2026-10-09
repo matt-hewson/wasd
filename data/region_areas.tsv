@@ -1,0 +1,129 @@
+# Play region id -> area. Written by tools/extract_treasures.py --region-areas from the game's own
+# files; don't edit by hand, change the rules or AREA_OVERRIDES there and rewrite.
+# Regions: PlayRegionParam's rows that a map floor carries. Area: a place name from the game's text, by
+# the first rule that gives one: a call made by hand (AREA_OVERRIDES, with reasons); m40's Untended Graves
+# world (4000xx); the place most of the region's floors name; the area most of its PlayRegionParam
+# group has; its map's own place (mAA_BB -> AA*100 + BB*10). PvP arenas have no area.
+# region_id	area
+300001	High Wall of Lothric
+300002	High Wall of Lothric
+300003	High Wall of Lothric
+300004	High Wall of Lothric
+300006	High Wall of Lothric
+300007	High Wall of Lothric
+300008	Lothric Castle
+300009	High Wall of Lothric
+300020	Consumed King's Garden
+300021	Consumed King's Garden
+300022	Consumed King's Garden
+300023	Consumed King's Garden
+300024	Consumed King's Garden
+301000	Lothric Castle
+301001	Lothric Castle
+301002	Lothric Castle
+301003	Lothric Castle
+301010	Lothric Castle
+301011	Lothric Castle
+310000	Undead Settlement
+310001	Undead Settlement
+310002	Undead Settlement
+310003	Undead Settlement
+310020	Undead Settlement
+310021	Undead Settlement
+320001	Archdragon Peak
+320002	Archdragon Peak
+320010	Archdragon Peak
+320011	Archdragon Peak
+320012	Archdragon Peak
+320013	Archdragon Peak
+320020	Archdragon Peak
+330000	Road of Sacrifices
+330001	Road of Sacrifices
+330002	Road of Sacrifices
+330010	Farron Keep
+330011	Farron Keep
+330012	Farron Keep
+330013	Farron Keep
+330014	Farron Keep
+330015	Farron Keep
+330020	Road of Sacrifices
+330021	Road of Sacrifices
+341000	Grand Archives
+341001	Grand Archives
+341002	Grand Archives
+341003	Grand Archives
+341010	Grand Archives
+341011	Grand Archives
+350000	Cathedral of the Deep
+350001	Cathedral of the Deep
+350002	Cathedral of the Deep
+350003	Cathedral of the Deep
+350004	Cathedral of the Deep
+350005	Cathedral of the Deep
+350010	Cathedral of the Deep
+350011	Cathedral of the Deep
+350020	Cathedral of the Deep
+370001	Irithyll of the Boreal Valley
+370002	Irithyll of the Boreal Valley
+370003	Irithyll of the Boreal Valley
+370004	Irithyll of the Boreal Valley
+370005	Irithyll of the Boreal Valley
+370006	Irithyll of the Boreal Valley
+370007	Irithyll of the Boreal Valley
+370008	Irithyll of the Boreal Valley
+370010	Irithyll of the Boreal Valley
+370011	Anor Londo
+370012	Anor Londo
+370013	Anor Londo
+380000	Catacombs of Carthus
+380001	Catacombs of Carthus
+380002	Catacombs of Carthus
+380010	Smouldering Lake
+380012	Smouldering Lake
+380013	Smouldering Lake
+380014	Smouldering Lake
+380015	Smouldering Lake
+380020	Catacombs of Carthus
+380021	Catacombs of Carthus
+390000	Irithyll Dungeon
+390001	Irithyll Dungeon
+390002	Irithyll Dungeon
+390003	Profaned Capital
+390004	Profaned Capital
+390005	Profaned Capital
+400000	Untended Graves
+400001	Untended Graves
+400002	Untended Graves
+400010	Untended Graves
+400100	Cemetery of Ash
+400101	Cemetery of Ash
+400102	Firelink Shrine
+400110	Consumed King's Garden
+410000	Kiln of the First Flame
+410001	Kiln of the First Flame
+410002	Kiln of the First Flame
+450000	Painted World of Ariandel
+450001	Painted World of Ariandel
+450002	Painted World of Ariandel
+450003	Painted World of Ariandel
+450005	Painted World of Ariandel
+450010	Painted World of Ariandel
+450011	Painted World of Ariandel
+450020	Painted World of Ariandel
+500000	The Dreg Heap
+500001	The Dreg Heap
+500002	The Dreg Heap
+500003	The Dreg Heap
+500020	The Dreg Heap
+510000	The Ringed City
+510001	The Ringed City
+510002	The Ringed City
+510003	The Ringed City
+510004	The Ringed City
+510005	The Ringed City
+510010	The Ringed City
+510011	The Ringed City
+510020	The Ringed City
+511000	The Ringed City
+511001	The Ringed City
+511010	The Ringed City

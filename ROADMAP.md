@@ -17,15 +17,25 @@ This roadmap shows the current direction of the project. Priorities may change b
 - [x] Live route mapping
 - [x] Session statistics
 - [x] Post-session analysis
-- [ ] Public beta packaging
-- [ ] Installer
+- [x] Public beta packaging
+- [x] Installer
+- [x] All game data read from your own install, nothing third-party shipped
+- [x] Open source under the GPL
 - [ ] External testing
-- [ ] Release documentation
+- [ ] First public release
 
 ## Next
 
-- Co-op partner state sharing
+### Co-op
+
+- Co-op partner state sharing: shared found items, your partner's health and area on the overlay
+- Warnings before one player does something the other hasn't, like killing a boss mid-questline
+- Both players in one results page
+
+### Dark Souls III
+
 - Improved build recommendations
+- Information on the enemy you're locked on to
 - Better session comparison
 - More robust game-version detection
 - Automatic update checking
@@ -35,9 +45,11 @@ This roadmap shows the current direction of the project. Priorities may change b
 
 WASD is intended to become a game-agnostic companion platform.
 
-Potential future games include:
+The next game is planned to be **Elden Ring**: WASD's memory reading already finds everything it needs by searching
+the game's code, which is what a game that's still being patched needs.
 
-- Elden Ring
+Other potential future games include:
+
 - Dark Souls Remastered
 - Dark Souls II
 - Sekiro

@@ -1,0 +1,77 @@
+# DS3 key items: goods id, kind, what it does. No names here: the app shows the game's own item names, read
+#   from the user's install (generated/item_names.tsv; items sharing a name, like the four Cinders of a Lord, are
+#   shown once).
+# Selection: the game's own key-item category (EquipParamGoods +0x3A = 1, found from the game's data), all 66 rows (62 items), plus Loretta's Bone by hand (user's call 2026-10-09: the game
+#   files it as an ordinary item, but it's a step of Greirat's questline). The real-data suite checks the list
+#   against the game's category.
+# Kind (ours): key (opens a door or a way on), tome (a spell tome or scroll for a teacher), quest (a questline or
+#   ending item), shop (unlocks a smith's infusions, a merchant's wares or a service), other.
+# What it does: written for this project from the game's own item descriptions.
+# goods_id	kind	opens
+390	quest	Give it to the Fire Keeper to heal the Dark Sigil
+490	quest	The curse of Hollowing, which builds up over time
+2001	key	Opens the room of the lift down to Lothric's deepest dungeon
+2005	key	Lets you through the barrier into Irithyll
+2007	key	Opens a barred window in Irithyll Dungeon
+2008	key	Opens most of the cell doors in Irithyll Dungeon
+2009	key	Opens a barred door off the sewer under Undead Settlement
+2010	key	Opens a cell on the High Wall of Lothric
+2011	key	Opens one cell in Irithyll Dungeon, where a knight is held
+2012	key	Opens the oldest cell in Irithyll Dungeon
+2013	key	Opens the old tower behind Firelink Shrine, up to the Bell Tower
+2014	key	Opens the main door of the Grand Archives
+2015	key	Opens the old tower behind Firelink Shrine, up to the Bell Tower
+2102	key	Hold it up outside the castle's main gate to be carried onward
+2103	shop	Give it to the blacksmith: Heavy, Sharp and Poison infusions
+2104	shop	Give it to the blacksmith: Crystal, Blessed and Deep infusions
+2105	shop	Give it to the blacksmith: Lightning, Simple and Chaos infusions
+2106	shop	Give it to the blacksmith: Dark, Blood and Hollow infusions
+2107	shop	Give it to the Shrine Handmaid for new wares
+2108	shop	Give it to the Shrine Handmaid for new wares
+2109	shop	Give it to the Shrine Handmaid for new wares
+2110	shop	Give it to the Shrine Handmaid for new wares
+2111	shop	Give it to the Shrine Handmaid for new wares
+2112	shop	Give it to the Shrine Handmaid for new wares
+2113	shop	Give it to the Shrine Handmaid for new wares
+2114	shop	Give it to the Shrine Handmaid for new wares
+2115	shop	Give it to the Shrine Handmaid for new wares
+2116	shop	Give it to the Shrine Handmaid for new wares
+2117	key	Place it at the statue of a beheading knight
+2118	quest	Found on Loretta's body in Undead Settlement; a step of Greirat's questline
+2119	tome	Give it to a storyteller: advanced miracles of Carim
+2120	tome	Give it to a storyteller: the knights' miracles of Lothric
+2121	tome	Give it to a storyteller: sunlight miracles
+2123	key	One of the four Lords' cinders, returned to their thrones in Firelink Shrine
+2124	key	One of the four Lords' cinders, returned to their thrones in Firelink Shrine
+2125	key	One of the four Lords' cinders, returned to their thrones in Firelink Shrine
+2126	key	One of the four Lords' cinders, returned to their thrones in Firelink Shrine
+2127	tome	Give it to the pyromancy master: advanced Great Swamp pyromancies
+2128	tome	Give it to the pyromancy master: Carthus battle pyromancies
+2129	tome	Give it to the pyromancy master: chaos pyromancies of Izalith
+2130	tome	Give it to a female pyromancy master: Quelana's pyromancies
+2131	tome	Give it to the pyromancy master: black flame pyromancies
+2132	tome	Give it to a sorcerer: the Crystal Sages' sorceries
+2133	tome	Give it to a sorcerer: Logan's sorceries
+2134	tome	Give it to a sorcerer: crystal sorceries
+2135	shop	Give it to Ludleth to transpose boss souls
+2137	key	Thrust it into the Firelink Shrine bonfire to warp between bonfires
+2138	quest	Give them to the Fire Keeper, who then sees what she never should (the End of Fire ending)
+2139	quest	The sword for the rite of wedlock with Anri (the Lord of Hollows)
+2140	tome	Give it to a sorcerer: the golden sorceries of Oolacile
+2142	quest	Hawkwood's challenge: meet him at the mausoleum in Farron
+2144	tome	Give it to a storyteller: miracles of the Deep
+2145	tome	Give it to a storyteller: miracles of Londor
+2146	shop	Give it to the Shrine Handmaid; perhaps new wares
+2147	shop	Give it to the Shrine Handmaid for new wares
+2148	shop	Give it to the Shrine Handmaid for new wares
+2149	shop	Give it to the Shrine Handmaid for new wares
+2150	shop	Give it to the Shrine Handmaid for new wares
+2151	shop	Give it to the Shrine Handmaid for new wares
+2152	shop	Give it to the Shrine Handmaid for new wares
+2153	other	Burn it at the Firelink Shrine bonfire to take part in Undead Matches
+2154	shop	Give it to the Shrine Handmaid for new wares
+2155	key	Works the contraption up to the library attic at the edge of Corvian Settlement
+2156	key	Hold it up facing the ringed cliff to be carried onward
+2157	shop	Give it to the Shrine Handmaid for new wares
+2158	quest	The blood a painter in Ariandel needs as pigment for a painted world
+2159	other	While held, slightly strengthens a Spear of the Church's protection

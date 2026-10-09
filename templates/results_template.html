@@ -1,0 +1,782 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WASD Results</title>
+<!-- Results page for WASD. `wasd-cli.exe report` copies this
+     template (templates/results_template.html) to reports/results.html with every saved session (sessions/*/*.jsonl)
+     injected in place of the data token on the SESSIONS line below, then opens it. Everything is
+     inline: no network, no install. Palette and chart rules follow the dataviz
+     reference palette (light + dark selected separately). -->
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface-1: #fcfcfb;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted: #898781;
+    --grid: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --series-1: #2a78d6;
+    --series-2: #eb6834;
+    --height-lo: #86b6ef;
+    --height-hi: #104281;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface-1: #1a1a19;
+      --text-primary: #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted: #898781;
+      --grid: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --series-1: #3987e5;
+      --series-2: #d95926;
+      --height-lo: #184f95;
+      --height-hi: #b7d3f6;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d;
+    --surface-1: #1a1a19;
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.10);
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --height-lo: #184f95;
+    --height-hi: #b7d3f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 24px; margin-bottom: 20px; }
+  h1 { font-size: 24px; margin: 0; font-weight: 650; }
+  .sub { color: var(--text-secondary); }
+  label.picker { margin-left: auto; color: var(--text-secondary); font-size: 14px; }
+  select {
+    font: inherit; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin-left: 6px;
+  }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
+  .tile, .card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  }
+  .tile { padding: 14px 16px; }
+  .tile .k { color: var(--text-secondary); font-size: 13px; }
+  .tile .v { font-size: 26px; font-weight: 650; margin-top: 2px; }
+  .tile .v.text { font-size: 17px; line-height: 1.3; margin-top: 6px; }
+  .tile .n { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; margin-bottom: 16px; }
+  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { padding: 16px; min-width: 0; }
+  .card h2 { font-size: 15px; margin: 0 0 2px; font-weight: 650; }
+  .card .cap { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
+  .card .row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+  .card .row select { margin-left: auto; }
+  svg { display: block; width: 100%; height: auto; overflow: visible; }
+  svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .empty { color: var(--text-muted); font-size: 14px; padding: 24px 0; text-align: center; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); }
+  th { color: var(--text-secondary); font-weight: 600; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tablewrap { overflow-x: auto; }
+  #tip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 8px; padding: 6px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    max-width: 260px;
+  }
+  #tip b { font-weight: 650; }
+  #tip .m { color: var(--text-secondary); }
+  footer { color: var(--text-muted); font-size: 12.5px; margin-top: 20px; }
+  section.card { margin-bottom: 16px; }
+  .mapwrap { display: flex; gap: 10px; align-items: stretch; }
+  canvas.map3d { display: block; flex: 1 1 auto; min-width: 0; border: 1px solid var(--grid); border-radius: 8px; cursor: grab; touch-action: none; }
+  .hslider { flex: 0 0 52px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; }
+  .hslider .val { font-size: 13px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .hslider .lbl { font-size: 11.5px; color: var(--text-muted); text-align: center; line-height: 1.2; }
+  .hslider input[type=range] {
+    writing-mode: vertical-lr; direction: rtl;  /* vertical, high at the top */
+    flex: 1 1 auto; width: 28px; margin: 0; accent-color: var(--series-1); cursor: ns-resize;
+  }
+  canvas.map3d.dragging { cursor: grabbing; }
+  .mapbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
+  .mapbar .key { display: inline-flex; align-items: center; gap: 6px; }
+  .mapbar .ramp { width: 44px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--height-lo), var(--height-hi)); }
+  .mapbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--series-2); }
+  .mapbar .dia { width: 9px; height: 9px; background: var(--text-primary); transform: rotate(45deg); }
+  .mapbar .hint { color: var(--text-muted); }
+  .perfsum { font-size: 13.5px; color: var(--text-primary); margin: 0 0 12px; font-variant-numeric: tabular-nums; }
+  .perfgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px 24px; }
+  @media (max-width: 480px) { .perfgrid { grid-template-columns: 1fr; } }
+  .perfgrid h3 { font-size: 13.5px; font-weight: 600; margin: 0 0 4px; }
+  .perfgrid .legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--text-secondary); margin: 0 0 4px; }
+  .perfgrid .legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 6px; }
+  .mapbar button {
+    margin-left: auto; font: inherit; font-size: 13px; color: var(--text-primary); background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>WASD Results</h1>
+    <span class="sub" id="subtitle"></span>
+    <label class="picker" id="playerPicker" hidden>Player<select id="player"></select></label>
+  </header>
+
+  <section class="tiles" id="tiles"></section>
+
+  <section class="grid2">
+    <div class="card">
+      <h2>Time per area</h2>
+      <p class="cap">Recorded play time, all sessions</p>
+      <div id="areaTime"></div>
+    </div>
+    <div class="card">
+      <h2>Deaths per area</h2>
+      <p class="cap">Deaths recorded while the tool was running</p>
+      <div id="areaDeaths"></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <h2>Area map</h2>
+      <select id="mapArea" aria-label="Area"></select>
+    </div>
+    <p class="cap">Everywhere you've walked with the tool running, coloured by height, with deaths and bonfire rests</p>
+    <div id="areaMap"></div>
+  </section>
+
+  <section class="card">
+    <h2>Level over the playthrough</h2>
+    <p class="cap">Soul level against the game's own play-time clock (hours)</p>
+    <div id="levelLine"></div>
+  </section>
+
+  <section class="card">
+    <div class="row">
+      <h2>Tool performance</h2>
+      <select id="perfSession" aria-label="Session"></select>
+    </div>
+    <p class="cap">The guide's own cost while it ran, one point per 5-second window (Milestone 5 stress test)</p>
+    <p class="perfsum" id="perfSummary"></p>
+    <div class="perfgrid" id="perfCharts"></div>
+  </section>
+
+  <section class="card">
+    <h2>Sessions</h2>
+    <p class="cap">One row per recorded session, newest first</p>
+    <div class="tablewrap"><table id="sessions"></table></div>
+  </section>
+
+  <footer>Generated by WASD __APP_VERSION__ from saved sessions. Read-only companion for Dark Souls III (Seamless Co-op).</footer>
+</main>
+<div id="tip"></div>
+
+<script>
+// [{file, events: [...]}, ...]; the player is the start event's character name.
+const SESSIONS = __SESSIONS_JSON__;
+for (const s of SESSIONS) s.character = (s.events.find(e => e.type === "start") || {}).character || "Unknown";
+
+// ---------- aggregation ----------
+function summarise(sessions) {
+  const areaTime = new Map(), areaDeaths = new Map(), deathsByArea = new Map();
+  const trailsByArea = new Map(), bonfiresByArea = new Map();
+  const listFor = (m, k) => { if (!m.has(k)) m.set(k, []); return m.get(k); };
+  const level = [], rows = [];
+  let seconds = 0, deaths = 0, lost = 0, recovered = 0, gained = 0, deathsTotal = 0, lastPlay = 0;
+  for (const s of sessions) {
+    const ev = s.events;
+    const start = ev.find(e => e.type === "start") || {};
+    const end = ev.find(e => e.type === "end");
+    const lastT = ev.length ? ev[ev.length - 1].t : 0;
+    const dur = end ? end.seconds : lastT;
+    seconds += dur;
+    let sDeaths = 0, sGained = end ? end.gained : 0;
+    const areasSeen = [];
+    const enters = ev.filter(e => e.type === "enter");
+    enters.forEach((e, i) => {
+      const until = i + 1 < enters.length ? enters[i + 1].t : dur;
+      areaTime.set(e.area, (areaTime.get(e.area) || 0) + Math.max(0, until - e.t));
+      if (!areasSeen.includes(e.area)) areasSeen.push(e.area);
+    });
+    // Trail: pos events belong to the area of the latest enter; a new run
+    // starts on an area change or a jump (warp, respawn: > 25 units or 10s).
+    // After a warp the position moves a few seconds before the area name
+    // does, so a run that starts with a jump and is followed by an enter
+    // within 10s belongs to the entered area. (Found 2026-10-07: one stray
+    // point per warp, filed under the old area, doubled that area's map.)
+    const jumped = (a, b) => Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z) > 25 || b.t - a.t > 10;
+    let curArea = "", run = null, runArea = "", prev = null;
+    for (let k = 0; k < ev.length; k++) {
+      const e = ev[k];
+      if (e.type === "enter") {
+        curArea = e.area;
+        if (run && runArea === e.area) continue;  // the run already moved here on its jump
+        run = null;
+        continue;
+      }
+      if (e.type === "pos" && curArea) {
+        const jump = !!prev && jumped(prev, e);
+        if (!run || !prev || jump) {
+          runArea = curArea;
+          if (jump) {
+            let last = e;
+            for (let j = k + 1; j < ev.length && ev[j].t - e.t <= 10; j++) {
+              if (ev[j].type === "enter") { runArea = ev[j].area; break; }
+              if (ev[j].type === "pos") { if (jumped(last, ev[j])) break; last = ev[j]; }
+            }
+          }
+          run = [];
+          listFor(trailsByArea, runArea).push(run);
+        }
+        run.push(e);
+        prev = e;
+      } else if (e.type === "bonfire" && curArea) {
+        listFor(bonfiresByArea, run ? runArea : curArea).push(e);
+      }
+    }
+    for (const e of ev) {
+      if (e.type === "death") {
+        sDeaths++;
+        const a = e.area || "Unknown";
+        areaDeaths.set(a, (areaDeaths.get(a) || 0) + 1);
+        if (!deathsByArea.has(a)) deathsByArea.set(a, []);
+        deathsByArea.get(a).push(e);
+        lost += e.soulsLost;
+      } else if (e.type === "bloodstain") {
+        recovered += e.souls;
+      } else if (e.type === "sample" && e.playTimeMs) {
+        level.push({ h: e.playTimeMs / 3600000, level: e.level });
+        if (e.playTimeMs > lastPlay) { lastPlay = e.playTimeMs; deathsTotal = e.deathsTotal; }
+      }
+    }
+    if (end && end.playTimeMs >= lastPlay) { lastPlay = end.playTimeMs; deathsTotal = end.deathsTotal; }
+    deaths += sDeaths;
+    gained += sGained;
+    rows.push({
+      startedAt: start.startedAt || s.file, dur, deaths: sDeaths,
+      perHour: dur >= 60 ? sGained / (dur / 3600) : null,
+      level: end ? end.level : start.level, areas: areasSeen
+    });
+  }
+  level.sort((a, b) => a.h - b.h);
+  rows.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+  return { areaTime, areaDeaths, deathsByArea, trailsByArea, bonfiresByArea, level, rows, seconds, deaths, lost, recovered, gained, deathsTotal, lastPlay };
+}
+
+// ---------- formatting ----------
+const fmtInt = n => Math.round(n).toLocaleString();
+function fmtDur(sec) {
+  sec = Math.round(sec);
+  const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = sec % 60;
+  return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m ${String(s).padStart(2, "0")}s`;
+}
+function fmtWhen(iso) {
+  const d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---------- tooltip ----------
+const tip = document.getElementById("tip");
+function showTip(html, x, y) {
+  tip.innerHTML = html;
+  tip.style.display = "block";
+  const r = tip.getBoundingClientRect();
+  let left = x + 14, top = y + 14;
+  if (left + r.width > innerWidth - 8) left = x - r.width - 14;
+  if (top + r.height > innerHeight - 8) top = y - r.height - 14;
+  tip.style.left = left + "px";
+  tip.style.top = top + "px";
+}
+const hideTip = () => { tip.style.display = "none"; };
+const NS = "http://www.w3.org/2000/svg";
+function el(name, attrs, parent) {
+  const n = document.createElementNS(NS, name);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(n);
+  return n;
+}
+
+// ---------- charts ----------
+// Horizontal bars, one series, sorted descending; 4px rounded data end.
+function hbar(container, rows, color, fmt, unit) {
+  container.innerHTML = "";
+  if (!rows.length) { container.innerHTML = '<div class="empty">Nothing recorded yet</div>'; return; }
+  const W = 480, labelW = 170, valueW = 64, barH = 18, gap = 10, top = 4;
+  const H = top + rows.length * (barH + gap);
+  const max = Math.max(...rows.map(r => r.value)) || 1;
+  const plotW = W - labelW - valueW;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": unit }, container);
+  el("line", { x1: labelW, x2: labelW, y1: 0, y2: H - gap / 2, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+  rows.forEach((r, i) => {
+    const y = top + i * (barH + gap), w = Math.max(2, (r.value / max) * plotW);
+    const label = el("text", { x: labelW - 8, y: y + barH / 2 + 4.5, "text-anchor": "end", "font-size": 12.5, fill: "var(--text-secondary)" }, svg);
+    label.textContent = r.label.length > 26 ? r.label.slice(0, 25) + "…" : r.label;
+    const r4 = Math.min(4, w / 2);
+    el("path", { d: `M${labelW},${y}h${w - r4}a${r4},${r4} 0 0 1 ${r4},${r4}v${barH - 2 * r4}a${r4},${r4} 0 0 1 -${r4},${r4}h-${w - r4}z`, fill: color }, svg);
+    const v = el("text", { x: labelW + w + 6, y: y + barH / 2 + 4.5, "font-size": 12.5, fill: "var(--text-primary)" }, svg);
+    v.textContent = fmt(r.value);
+    const hit = el("rect", { x: 0, y: y - gap / 2, width: W, height: barH + gap, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", ev => showTip(`<b>${esc(r.label)}</b><br><span class="m">${unit}:</span> ${fmt(r.value)}`, ev.clientX, ev.clientY));
+    hit.addEventListener("mouseleave", hideTip);
+  });
+}
+
+// Level line with a crosshair + tooltip; x = play-time hours.
+function levelLine(container, pts) {
+  container.innerHTML = "";
+  if (pts.length < 2) { container.innerHTML = '<div class="empty">Needs a couple of recorded samples (one every 30s)</div>'; return; }
+  // Drawn at the card's real width (not a fixed viewBox scaled up), so
+  // text stays 11.5px in the full-width card.
+  const W = Math.max(320, container.clientWidth || 480), H = 240, L = 40, R = 12, T = 10, B = 30;
+  const x0 = pts[0].h, x1 = pts[pts.length - 1].h;
+  const lv = pts.map(p => p.level);
+  let y0 = Math.min(...lv), y1 = Math.max(...lv);
+  if (y1 - y0 < 4) { y0 -= 2; y1 += 2; }
+  const X = h => L + (x1 > x0 ? (h - x0) / (x1 - x0) : 0.5) * (W - L - R);
+  const Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Soul level over play time" }, container);
+  // Whole-level ticks at an even step (rounded quarter-steps gave 60, 62, 63, 65).
+  const step = Math.max(1, Math.ceil((y1 - y0) / 4));
+  for (let v = Math.ceil(y0); v <= y1; v += step) {
+    const y = Y(v);
+    el("line", { x1: L, x2: W - R, y1: y, y2: y, stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    const t = el("text", { x: L - 6, y: y + 4, "text-anchor": "end", "font-size": 11.5, fill: "var(--text-muted)" }, svg);
+    t.textContent = Math.round(v);
+  }
+  // Play-time ticks as "22h 54m"; repeated labels (short spans) are dropped.
+  const hm = h => `${Math.floor(h)}h ${String(Math.floor((h % 1) * 60)).padStart(2, "0")}m`;
+  let lastTick = "";
+  for (let i = 0; i <= 4; i++) {
+    const h = x0 + (i / 4) * (x1 - x0), label = hm(h);
+    if (label === lastTick) continue;
+    lastTick = label;
+    const t = el("text", { x: X(h), y: H - 10, "text-anchor": i === 0 ? "start" : i === 4 ? "end" : "middle", "font-size": 11.5, fill: "var(--text-muted)" }, svg);
+    t.textContent = label;
+  }
+  el("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${X(p.h).toFixed(1)},${Y(p.level).toFixed(1)}`).join("");
+  el("path", { d, fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+  const cross = el("line", { y1: T, y2: H - B, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
+  const dot = el("circle", { r: 4.5, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, svg);
+  const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" }, svg);
+  hit.addEventListener("mousemove", ev => {
+    const box = svg.getBoundingClientRect();
+    const hx = x0 + ((ev.clientX - box.left) * (W / box.width) - L) / (W - L - R) * (x1 - x0);
+    let best = pts[0];
+    for (const p of pts) if (Math.abs(p.h - hx) < Math.abs(best.h - hx)) best = p;
+    cross.setAttribute("x1", X(best.h)); cross.setAttribute("x2", X(best.h)); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", X(best.h)); dot.setAttribute("cy", Y(best.level)); dot.setAttribute("visibility", "visible");
+    showTip(`<b>Level ${best.level}</b><br><span class="m">at ${hm(best.h)} played</span>`, ev.clientX, ev.clientY);
+  });
+  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
+}
+
+// Tool performance (Milestone 5): small multiples, one chart per measure
+// (never two scales on one axis), x = time since the session's first perf
+// window. rows: [time, session_t, window_s, ticks, rate_hz, lat_avg_us,
+// lat_max_us, cpu_pct_core, working_set_mb, private_mb] from <stamp>.perf.csv.
+// Gaps over 15s (paused, or the game not running) break the line.
+function perfCharts(container, rows) {
+  container.innerHTML = "";
+  const pts = rows.map(r => ({ at: new Date(r[0]).getTime(), v: r })).filter(p => !Number.isNaN(p.at));
+  if (pts.length < 2) return;
+  const t0 = pts[0].at;
+  for (const p of pts) p.h = (p.at - t0) / 3600000;
+  const hm = h => { const m = Math.round(h * 60); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; };
+  const charts = [
+    { title: "Poll rate", unit: "Hz", fmt: v => v.toFixed(2), series: [{ i: 4, label: "Poll rate", color: "var(--series-1)" }] },
+    { title: "Read latency", unit: "µs", fmt: v => v.toFixed(1), series: [
+      { i: 5, label: "Average", color: "var(--series-1)" }, { i: 6, label: "Worst", color: "var(--series-2)" }] },
+    { title: "CPU", unit: "% of one core", fmt: v => v.toFixed(2), series: [{ i: 7, label: "CPU", color: "var(--series-1)" }] },
+    { title: "Memory", unit: "MB", fmt: v => v.toFixed(1), series: [
+      { i: 8, label: "Working set", color: "var(--series-1)" }, { i: 9, label: "Private", color: "var(--series-2)" }] },
+  ];
+  // All boxes first, so each is measured at its final grid width.
+  const boxes = charts.map(() => container.appendChild(document.createElement("div")));
+  charts.forEach((c, ci) => {
+    const box = boxes[ci];
+    box.innerHTML = `<h3>${esc(c.title)} <span style="color:var(--text-muted);font-weight:400">(${esc(c.unit)})</span></h3>` +
+      (c.series.length > 1 ? `<div class="legend">${c.series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join("")}</div>` : "");
+    const W = Math.max(300, box.clientWidth || 360), H = 170, L = 48, R = 12, T = 8, B = 26;
+    const x1 = pts[pts.length - 1].h || 1 / 60;
+    const vals = c.series.flatMap(s => pts.map(p => p.v[s.i]));
+    let y0 = 0, y1 = Math.max(...vals);  // from zero: creep shows as a slope, not as noise blown up
+    if (y1 <= 0) y1 = 1;
+    const step = Math.pow(10, Math.floor(Math.log10(y1 / 4)));
+    const tick = [1, 2, 2.5, 5, 10].map(m => m * step).find(s => y1 / s <= 4) || step * 10;
+    y1 = Math.ceil(y1 / tick) * tick;
+    const X = h => L + (h / x1) * (W - L - R);
+    const Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `${c.title} over the session` }, box);
+    for (let v = y0; v <= y1 + tick / 2; v += tick) {
+      el("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+      const t = el("text", { x: L - 6, y: Y(v) + 4, "text-anchor": "end", "font-size": 11.5, fill: "var(--text-muted)" }, svg);
+      t.textContent = +v.toFixed(3);
+    }
+    let lastLabel = "";
+    for (let i = 0; i <= 3; i++) {
+      const h = (i / 3) * x1, label = hm(h);
+      if (label === lastLabel) continue;
+      lastLabel = label;
+      const t = el("text", { x: X(h), y: H - 8, "text-anchor": i === 0 ? "start" : i === 3 ? "end" : "middle", "font-size": 11.5, fill: "var(--text-muted)" }, svg);
+      t.textContent = label;
+    }
+    el("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+    for (const s of c.series) {
+      const d = pts.map((p, k) => `${k && p.at - pts[k - 1].at <= 15000 ? "L" : "M"}${X(p.h).toFixed(1)},${Y(p.v[s.i]).toFixed(1)}`).join("");
+      el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    }
+    const cross = el("line", { y1: T, y2: H - B, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
+    const dots = c.series.map(s => el("circle", { r: 4.5, fill: s.color, stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, svg));
+    const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", ev => {
+      const r = svg.getBoundingClientRect();
+      const hx = ((ev.clientX - r.left) * (W / r.width) - L) / (W - L - R) * x1;
+      let best = pts[0];
+      for (const p of pts) if (Math.abs(p.h - hx) < Math.abs(best.h - hx)) best = p;
+      cross.setAttribute("x1", X(best.h)); cross.setAttribute("x2", X(best.h)); cross.setAttribute("visibility", "visible");
+      c.series.forEach((s, k) => { dots[k].setAttribute("cx", X(best.h)); dots[k].setAttribute("cy", Y(best.v[s.i])); dots[k].setAttribute("visibility", "visible"); });
+      showTip(`<b>${esc(best.v[0].slice(11))}</b> <span class="m">(${hm(best.h)} in)</span><br>` +
+        c.series.map(s => `${esc(s.label)}: ${c.fmt(best.v[s.i])} ${esc(c.unit)}`).join("<br>"), ev.clientX, ev.clientY);
+    });
+    hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); });
+  });
+}
+
+// One-line stress-test verdict for a session's perf rows.
+function perfSummary(rows) {
+  const n = rows.length, col = i => rows.map(r => r[i]);
+  const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const span = (new Date(rows[n - 1][0]) - new Date(rows[0][0])) / 1000;
+  // Memory creep: the last quarter's average against the first quarter's.
+  const q = Math.max(1, Math.floor(n / 4)), ws = col(8);
+  const drift = avg(ws.slice(n - q)) - avg(ws.slice(0, q));
+  return `${fmtDur(span)} · poll rate ${avg(col(4)).toFixed(2)} Hz avg (lowest ${Math.min(...col(4)).toFixed(2)}) · ` +
+    `latency ${avg(col(5)).toFixed(1)} µs avg, ${Math.max(...col(6)).toFixed(1)} µs worst · CPU ${avg(col(7)).toFixed(2)}% · ` +
+    `memory ${ws[0].toFixed(1)} → ${ws[n - 1].toFixed(1)} MB (${drift >= 0 ? "+" : "−"}${Math.abs(drift).toFixed(1)} MB first to last quarter)`;
+}
+
+// Area map: the walked trail in 3D (canvas, no libraries), deaths and
+// bonfire rests on top. Starts top-down. Standard browser 3D controls
+// (three.js OrbitControls convention): left-drag orbits, right-drag or
+// Shift+drag pans, the wheel zooms toward the cursor, double-click resets.
+// Orthographic projection, so distances read true when top-down.
+function areaMap(container, data) {
+  container.innerHTML = "";
+  const trailPts = data.trails.flat();
+  const all = [...trailPts, ...data.deaths, ...data.bonfires];
+  if (!all.length) {
+    container.innerHTML = '<div class="empty">Nothing recorded in this area yet. The map fills in as you play with the tool running.</div>';
+    return;
+  }
+  const H = 400;
+  const canvas = document.createElement("canvas");
+  canvas.className = "map3d";
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", "3D map of the walked trail, deaths and bonfires in this area");
+  // Height exaggeration slider (x1 = true scale) on the map's right edge.
+  const wrap = document.createElement("div");
+  wrap.className = "mapwrap";
+  const side = document.createElement("div");
+  side.className = "hslider";
+  side.innerHTML =
+    '<span class="val">×1</span>' +
+    '<input type="range" min="1" max="10" step="0.5" value="1" aria-label="Height exaggeration">' +
+    '<span class="lbl">Height</span>';
+  wrap.append(canvas, side);
+  container.appendChild(wrap);
+  const bar = document.createElement("div");
+  bar.className = "mapbar";
+  bar.innerHTML =
+    '<span class="key"><i class="ramp"></i>Height: low to high</span>' +
+    '<span class="key"><i class="dot"></i>Death</span>' +
+    '<span class="key"><i class="dia"></i>Bonfire rested</span>' +
+    '<span class="hint">Drag to orbit · right-drag or Shift+drag to pan · scroll to zoom · double-click to reset · slider exaggerates height</span>' +
+    '<button type="button">Top-down</button>';
+  container.appendChild(bar);
+
+  const xs = all.map(p => p.x), ys = all.map(p => p.y), zs = all.map(p => p.z);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+  const extent = Math.max(maxX - minX, maxZ - minZ, maxY - minY, 20);
+  const heightSpan = Math.max(maxY - minY, 1);
+
+  const css = getComputedStyle(document.documentElement);
+  const v = name => css.getPropertyValue(name).trim();
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  const lo = hex(v("--height-lo")), hi = hex(v("--height-hi"));
+  const BINS = 16;
+  const binColor = b => {
+    const t = b / (BINS - 1);
+    return `rgb(${lo.map((c, i) => Math.round(c + (hi[i] - c) * t)).join(",")})`;
+  };
+  const colors = { surface: v("--surface-1"), death: v("--series-2"), bonfire: v("--text-primary"), grid: v("--grid"), muted: v("--text-muted") };
+
+  let W = 0, yaw = 0, elev = Math.PI / 2, scale = 1, panX = 0, panY = 0, heightScale = 1;
+  const reset = () => {
+    yaw = 0; elev = Math.PI / 2; panX = 0; panY = 0;
+    scale = Math.min(W, H) * 0.86 / extent;
+  };
+  const project = p => {
+    const x = p.x - cx, y = (p.y - cy) * heightScale, z = p.z - cz;
+    const c = Math.cos(yaw), s = Math.sin(yaw);
+    const xr = x * c - z * s, zr = x * s + z * c;
+    const up = zr * Math.sin(elev) + y * Math.cos(elev);
+    return [W / 2 + panX + xr * scale, H / 2 + panY - up * scale];
+  };
+
+  // Trail segments grouped into height bins: one canvas path per bin.
+  const segs = [];
+  for (const run of data.trails) {
+    for (let i = 1; i < run.length; i++) {
+      const a = run[i - 1], b = run[i];
+      const t = ((a.y + b.y) / 2 - minY) / heightSpan;
+      segs.push([a, b, Math.min(BINS - 1, Math.max(0, Math.round(t * (BINS - 1))))]);
+    }
+  }
+
+  // Panning limit (user's request, 2026-10-07): the view can't drift away
+  // from the drawn area. With the area's box projected on screen, the
+  // view's centre must stay inside it, give or take 40px; a box smaller
+  // than the view must stay wholly on screen.
+  const corners = [];
+  for (const x of [minX, maxX]) for (const y of [minY, maxY]) for (const z of [minZ, maxZ]) corners.push({ x, y, z });
+  const clampPan = () => {
+    const ps = corners.map(project);
+    const l = Math.min(...ps.map(p => p[0])), r = Math.max(...ps.map(p => p[0]));
+    const t = Math.min(...ps.map(p => p[1])), b = Math.max(...ps.map(p => p[1]));
+    const mx = Math.max(40, W / 2 - (r - l)), my = Math.max(40, H / 2 - (b - t));
+    if (W / 2 < l - mx) panX -= l - mx - W / 2;
+    else if (W / 2 > r + mx) panX += W / 2 - r - mx;
+    if (H / 2 < t - my) panY -= t - my - H / 2;
+    else if (H / 2 > b + my) panY += H / 2 - b - my;
+  };
+
+  let raf = 0;
+  const draw = () => {
+    raf = 0;
+    clampPan();
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext("2d");
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.lineWidth = 1.75;
+    ctx.lineCap = "round";
+    for (let b = 0; b < BINS; b++) {
+      ctx.beginPath();
+      for (const [p, q, bin] of segs) {
+        if (bin !== b) continue;
+        const [x1, y1] = project(p), [x2, y2] = project(q);
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+      }
+      ctx.strokeStyle = binColor(b);
+      ctx.stroke();
+    }
+    if (trailPts.length && segs.length === 0) {  // a single recorded point
+      for (const p of trailPts) {
+        const [x, y] = project(p);
+        ctx.fillStyle = binColor(Math.round((p.y - minY) / heightSpan * (BINS - 1)));
+        ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+      }
+    }
+    for (const bf of data.bonfires) {
+      const [x, y] = project(bf);
+      ctx.beginPath();
+      ctx.moveTo(x, y - 7); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 7, y); ctx.closePath();
+      ctx.fillStyle = colors.bonfire; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = colors.surface; ctx.stroke();
+    }
+    for (const d of data.deaths) {
+      const [x, y] = project(d);
+      ctx.beginPath();
+      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.fillStyle = colors.death; ctx.fill();
+      ctx.lineWidth = 2; ctx.strokeStyle = colors.surface; ctx.stroke();
+    }
+    // Scale bar only when (nearly) top-down, where it's true.
+    if (elev > 1.4) {
+      const unit = Math.pow(10, Math.floor(Math.log10(Math.max(1, 90 / scale))));
+      const len = unit * scale;
+      ctx.lineWidth = 2; ctx.strokeStyle = colors.muted;
+      ctx.beginPath(); ctx.moveTo(12, H - 14); ctx.lineTo(12 + len, H - 14); ctx.stroke();
+      ctx.fillStyle = colors.muted;
+      ctx.font = "11.5px system-ui, -apple-system, 'Segoe UI', sans-serif";
+      ctx.fillText(`${unit} unit${unit === 1 ? "" : "s"}`, 18 + len, H - 10);
+    }
+  };
+  const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
+  const size = () => {
+    const dpr = window.devicePixelRatio || 1;
+    const first = W === 0;
+    W = Math.max(200, wrap.clientWidth - side.offsetWidth - 10);
+    canvas.width = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    canvas.style.width = W + "px";
+    canvas.style.height = H + "px";
+    if (first) reset();
+    draw();
+  };
+
+  // ---- controls ----
+  let drag = null;
+  canvas.addEventListener("contextmenu", e => e.preventDefault());
+  canvas.addEventListener("pointerdown", e => {
+    drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey };
+    canvas.setPointerCapture(e.pointerId);
+    canvas.classList.add("dragging");
+    hideTip();
+  });
+  canvas.addEventListener("pointerup", e => {
+    drag = null;
+    canvas.releasePointerCapture(e.pointerId);
+    canvas.classList.remove("dragging");
+  });
+  canvas.addEventListener("pointermove", e => {
+    if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      drag.x = e.clientX; drag.y = e.clientY;
+      if (drag.pan) { panX += dx; panY += dy; }
+      else {
+        yaw += dx * 0.008;
+        elev = Math.min(Math.PI / 2, Math.max(0.05, elev + dy * 0.008));
+      }
+      redraw();
+      return;
+    }
+    // Hover: nearest death or bonfire within 12px.
+    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    let best = null, bestD = 144;
+    for (const d of data.deaths) { const [x, y] = project(d); const dd = (x - mx) ** 2 + (y - my) ** 2; if (dd < bestD) { bestD = dd; best = { kind: "death", p: d }; } }
+    for (const b of data.bonfires) { const [x, y] = project(b); const dd = (x - mx) ** 2 + (y - my) ** 2; if (dd < bestD) { bestD = dd; best = { kind: "bonfire", p: b }; } }
+    if (!best) { hideTip(); return; }
+    const p = best.p, where = `<span class="m">at</span> ${p.x.toFixed(1)}, ${p.y.toFixed(1)}, ${p.z.toFixed(1)}`;
+    showTip(best.kind === "death"
+      ? `<b>Death</b><br><span class="m">lost</span> ${fmtInt(p.soulsLost)} souls<br>${where}`
+      : `<b>${esc(p.name)}</b><br><span class="m">bonfire rested</span><br>${where}`, e.clientX, e.clientY);
+  });
+  canvas.addEventListener("pointerleave", () => { if (!drag) hideTip(); });
+  canvas.addEventListener("wheel", e => {
+    e.preventDefault();
+    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
+    const f = Math.exp(-e.deltaY * 0.0015);
+    panX = mx - W / 2 - (mx - W / 2 - panX) * f;
+    panY = my - H / 2 - (my - H / 2 - panY) * f;
+    scale *= f;
+    redraw();
+  }, { passive: false });
+  canvas.addEventListener("dblclick", () => { reset(); redraw(); });
+  bar.querySelector("button").addEventListener("click", () => { reset(); redraw(); });
+  const slider = side.querySelector("input"), sliderVal = side.querySelector(".val");
+  slider.addEventListener("input", () => {
+    heightScale = Number(slider.value);
+    sliderVal.textContent = "×" + (heightScale % 1 ? heightScale.toFixed(1) : heightScale);
+    redraw();
+  });
+
+  // A "#tilt" URL hash starts tilted (used to check the 3D view rendering).
+  new ResizeObserver(size).observe(container);
+  size();
+  if (location.hash === "#tilt") { yaw = 0.7; elev = 0.55; redraw(); }
+}
+
+// ---------- page ----------
+function render(character) {
+  const sessions = SESSIONS.filter(s => s.character === character);
+  const S = summarise(sessions);
+  document.getElementById("subtitle").textContent =
+    `${character} · ${sessions.length} session${sessions.length === 1 ? "" : "s"} recorded`;
+
+  const deadliest = [...S.areaDeaths.entries()].sort((a, b) => b[1] - a[1])[0];
+  const tiles = [
+    ["Time recorded", fmtDur(S.seconds), `${fmtDur(S.lastPlay / 1000)} total in-game`],
+    ["Deaths", fmtInt(S.deaths), `${fmtInt(S.deathsTotal)} across the playthrough`],
+    ["Souls lost", fmtInt(S.lost), `${fmtInt(S.recovered)} recovered`],
+    ["Souls gained", fmtInt(S.gained), S.seconds >= 60 ? `${fmtInt(S.gained / (S.seconds / 3600))} per hour` : "per hour after 1 min"],
+    ["Deadliest area", deadliest ? deadliest[0] : "None yet", deadliest ? `${deadliest[1]} death${deadliest[1] === 1 ? "" : "s"}` : "", true],
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(([k, v, n, isText]) =>
+    `<div class="tile"><div class="k">${esc(k)}</div><div class="v${isText ? " text" : ""}">${esc(v)}</div><div class="n">${esc(n)}</div></div>`).join("");
+
+  const byValue = m => [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  hbar(document.getElementById("areaTime"), byValue(S.areaTime), "var(--series-1)", fmtDur, "Time");
+  hbar(document.getElementById("areaDeaths"), byValue(S.areaDeaths), "var(--series-2)", fmtInt, "Deaths");
+  levelLine(document.getElementById("levelLine"), S.level);
+
+  // Areas with anything to draw, most time spent first.
+  const mapSel = document.getElementById("mapArea");
+  const mapAreas = [...new Set([...S.trailsByArea.keys(), ...S.deathsByArea.keys(), ...S.bonfiresByArea.keys()])]
+    .sort((a, b) => (S.areaTime.get(b) || 0) - (S.areaTime.get(a) || 0));
+  mapSel.innerHTML = mapAreas.map(a => `<option>${esc(a)}</option>`).join("") || "<option>Nothing recorded yet</option>";
+  const drawMap = () => areaMap(document.getElementById("areaMap"), {
+    trails: S.trailsByArea.get(mapSel.value) || [],
+    deaths: S.deathsByArea.get(mapSel.value) || [],
+    bonfires: S.bonfiresByArea.get(mapSel.value) || [],
+  });
+  mapSel.onchange = drawMap;
+  drawMap();
+
+  // Tool performance: sessions with a perf.csv, longest first (the stress test).
+  const perfSel = document.getElementById("perfSession");
+  const withPerf = sessions.filter(s => s.perf && s.perf.length >= 2).sort((a, b) => b.perf.length - a.perf.length);
+  perfSel.innerHTML = withPerf.map((s, i) => {
+    const st = s.events.find(e => e.type === "start") || {};
+    const span = (new Date(s.perf[s.perf.length - 1][0]) - new Date(s.perf[0][0])) / 1000;
+    return `<option value="${i}">${esc(fmtWhen(st.startedAt || s.file))} · ${fmtDur(span)}</option>`;
+  }).join("") || "<option>No perf data yet</option>";
+  perfSel.disabled = !withPerf.length;
+  const drawPerf = () => {
+    const s = withPerf[Number(perfSel.value)];
+    document.getElementById("perfSummary").textContent = s ? perfSummary(s.perf) : "";
+    if (s) perfCharts(document.getElementById("perfCharts"), s.perf);
+    else document.getElementById("perfCharts").innerHTML =
+      '<div class="empty">No perf figures yet. Sessions recorded from now on save them (a .perf.csv beside each session log).</div>';
+  };
+  perfSel.onchange = drawPerf;
+  drawPerf();
+
+  document.getElementById("sessions").innerHTML =
+    `<thead><tr><th>Started</th><th class="num">Length</th><th class="num">Deaths</th><th class="num">Souls/h</th><th class="num">Level</th><th>Areas</th></tr></thead><tbody>` +
+    S.rows.map(r => `<tr><td>${esc(fmtWhen(r.startedAt))}</td><td class="num">${fmtDur(r.dur)}</td><td class="num">${r.deaths}</td>` +
+      `<td class="num">${r.perHour == null ? "–" : fmtInt(r.perHour)}</td><td class="num">${r.level ?? ""}</td><td>${esc(r.areas.join(", "))}</td></tr>`).join("") +
+    `</tbody>`;
+}
+
+const characters = [...new Set(SESSIONS.map(s => s.character))];
+if (!characters.length) {
+  document.querySelector("main").innerHTML = '<h1>WASD Results</h1><p class="sub">No sessions recorded yet. Run <code>wasd-cli.exe window</code> (or <code>overlay</code> / <code>stats --live</code>) and play for at least a minute.</p>';
+} else {
+  const sel = document.getElementById("player");
+  sel.innerHTML = characters.map(c => `<option>${esc(c)}</option>`).join("");
+  document.getElementById("playerPicker").hidden = characters.length < 2;
+  sel.onchange = () => render(sel.value);
+  render(characters[0]);
+}
+</script>
+</body>
+</html>

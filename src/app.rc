@@ -1,0 +1,46 @@
+// Resources linked into the exe: the version info
+// that Explorer's Details tab, Settings -> Apps and the installer read,
+// the app icon, and the application manifest. Values come from version.h.
+#include <winver.h>
+#include "version.h"
+
+// The first icon resource is the exe's icon in Explorer and on the taskbar.
+1 ICON "../assets/app.ico"
+
+// RT_MANIFEST (24), id 1: the process manifest. Linked with /MANIFEST:NO so
+// the linker doesn't add its default one as well.
+1 24 "app.manifest"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION WASD_VERSION_MAJOR, WASD_VERSION_MINOR, WASD_VERSION_PATCH, 0
+ PRODUCTVERSION WASD_VERSION_MAJOR, WASD_VERSION_MINOR, WASD_VERSION_PATCH, 0
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS 0
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE VFT2_UNKNOWN
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"  // US English, Unicode
+    BEGIN
+      VALUE "CompanyName", WASD_APP_PUBLISHER
+      VALUE "FileDescription", WASD_APP_DESCRIPTION
+      VALUE "FileVersion", WASD_VERSION_STRING
+#ifdef WASD_GUI  // WASD.exe: rc /d WASD_GUI (build.ps1)
+      VALUE "InternalName", "WASD"
+      VALUE "OriginalFilename", "WASD.exe"
+#else
+      VALUE "InternalName", "wasd-cli"
+      VALUE "OriginalFilename", "wasd-cli.exe"
+#endif
+      VALUE "LegalCopyright", WASD_APP_COPYRIGHT
+      VALUE "ProductName", WASD_APP_NAME
+      VALUE "ProductVersion", WASD_VERSION_STRING
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END
