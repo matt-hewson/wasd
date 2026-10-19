@@ -38,6 +38,7 @@
         <li><a href="#safety">Safety</a></li>
         <li><a href="#install">Install</a></li>
         <li><a href="#coop">Co-op &amp; next</a></li>
+        <li><a href="#about">About</a></li>
         <li><a href="#support">Support</a></li>
       </ul>
     </nav>
@@ -59,7 +60,9 @@
     <div>
       <p class="eyebrow">For Dark Souls III · Seamless Co-op · PC</p>
       <h1 id="hero-title" style="margin-top:18px">WASD<span class="expand">World Awareness &amp; State Display</span></h1>
-      <p class="lede">A read-only companion for Dark Souls III with Seamless Co-op. It tells you what's left, what's ahead, and only as much as you want to know.</p>
+      <p class="lede">WASD is a free, open-source companion for Dark Souls III with Seamless Co-op.</p>
+      <p class="lede">It tracks things like missed items, bosses, character stats and where you've been. There's an in-game overlay, a dashboard for your second monitor, and a session report for looking back at your run.</p>
+      <p class="lede">You can also control how much it tells you, so you don't have to spoil anything you haven't found yet.</p>
 
       <div class="dl">
         <!-- VERSION: this is the only place the version number appears. Bump it here. -->
@@ -74,7 +77,7 @@
         <li>Read-only</li>
         <li>Seamless Co-op only</li>
         <li>Nothing leaves your PC</li>
-        <li><a href="#safety">How we know</a></li>
+        <li><a href="#safety">How I know</a></li>
       </ul>
 
       <div class="to-pc">
@@ -98,15 +101,15 @@
   <div class="wrap tiers">
     <div class="tiers-copy">
       <p class="eyebrow">Spoiler tiers</p>
-      <h2 id="tiers-title" style="margin-top:14px">How much should the fire tell you?</h2>
-      <p>Every hint in WASD follows one setting. Turn it down for a blind run, up for a cleanup pass. Press <kbd>F9</kbd> in game to change it without leaving the fight.</p>
+      <h2 id="tiers-title" style="margin-top:14px">Spoilers are up to you</h2>
+      <p>Every hint in WASD follows one setting. Turn it down for a blind run, up for a cleanup pass. Press <kbd>F9</kbd> in game to change it without leaving the game.</p>
       <div class="tier-key">
         <p><b>Off</b>Counts only. No directions, no names.</p>
         <p><b>Vague</b>A nudge that something is there.</p>
         <p><b>Category</b>What kind of thing, and where.</p>
         <p><b>Full</b>Exact names, bosses and routes.</p>
       </div>
-      <p class="flavour">Knowing too much robs a journey of its weight. Choose how much the fire tells you.</p>
+      <p class="flavour">Choose how much the tool tells you.</p>
     </div>
 
     <div class="demo" data-demo>
@@ -171,8 +174,9 @@
   <div class="wrap">
     <div class="sec-head">
       <p class="eyebrow">What it shows</p>
-      <h2 id="shows-title">Three ways to look at the same fire</h2>
-      <p>A live page for your second monitor, a small overlay in the game, and a report when you're done for the night.</p>
+      <h2 id="shows-title">Use it however you prefer</h2>
+      <p>There's a browser dashboard if you have a second monitor, a small overlay if you'd rather keep everything in-game, and a results page for looking back at your session.</p>
+      <p>You can use all three or just whichever ones you find useful.</p>
     </div>
 
     <article class="surface" aria-labelledby="s-live">
@@ -197,7 +201,6 @@
         <h3 id="s-live">The Live Page</h3>
         <p class="effect">Shows your character, gear, nearby items, bosses and trail, as you play.</p>
         <p class="body">Open <code>localhost:8765</code> in any browser. It updates as you move, and route hints point you on when you're unsure where to go. No more alt-tabbing to a wiki every five minutes.</p>
-        <p class="flavour">A record kept by a patient hand, of every step and every fall.</p>
       </div>
     </article>
 
@@ -236,20 +239,19 @@
       <div class="item">
         <p class="kind">Surface · after a session</p>
         <h3 id="s-results">The Results Page</h3>
-        <p class="effect">A report of the night: deaths, time, souls gained and lost.</p>
+        <p class="effect">A report of the session: deaths, time, souls gained and lost.</p>
         <ul>
           <li>A 3D trail of where you went</li>
           <li>Boss kills, and which phase each attempt ended in</li>
           <li>Weapon changes along the way</li>
         </ul>
-        <p class="flavour">Souls gained, souls lost. The ledger does not judge.</p>
       </div>
     </article>
 
     <div class="themes" aria-labelledby="themes-title">
       <div class="themes-h">
         <h3 id="themes-title">Three themes for the live page</h3>
-        <p>Pick in settings. Same numbers, different light.</p>
+        <p>Pick in settings. Same numbers, different layout.</p>
       </div>
       <div class="theme"><figure>
         <div class="shot tall"><!-- <img src="img/theme-bonfire.webp" alt="..." loading="lazy"> --><p class="ph"><b>Bonfire</b>Live page screenshot</p></div>
@@ -264,14 +266,14 @@
 
     <div class="also">
       <div>
-        <h3>Also in the pack</h3>
+        <h3>Also in the tool</h3>
         <p>Each follows your spoiler tier.</p>
       </div>
       <dl>
-        <div><dt>Missable Warnings</dt><dd>Flags NPC questline steps you're about to break, before you break them.<span class="flavour">Some doors close quietly, and do not open again.</span></dd></div>
-        <div><dt>Key Items</dt><dd>Tracks the items that open the way forward, so none are left behind.</dd></div>
+        <div><dt>Missable Warnings</dt><dd>Flags NPC questline steps you're about to break, before you break them.</dd></div>
+        <div><dt>Key Items</dt><dd>Tracks the key items in the game.</dd></div>
         <div><dt>Upgrade Tracking</dt><dd>Shards and chunks against your next level, e.g. <code>+1 → +2 Titanite Shard, 1 / 2</code>.</dd></div>
-        <div><dt>Route Guidance</dt><dd>All 23 areas, including the DLC. Where next, and which boss stands in the way.<span class="flavour">Every road leads somewhere. Not all of them lead on.</span></dd></div>
+        <div><dt>Route Guidance</dt><dd>All 23 areas, including the DLC. Where next, and which boss stands in the way.</dd></div>
       </dl>
     </div>
   </div>
@@ -282,8 +284,10 @@
   <div class="wrap">
     <div class="sec-head">
       <p class="eyebrow">Safe by design</p>
-      <h2 id="safety-title">It looks. It never touches.</h2>
-      <p>Anything that reads a FromSoftware game's memory deserves suspicion. Here is exactly what WASD does, and what it won't.</p>
+      <h2 id="safety-title">How WASD works</h2>
+      <p>WASD reads information from the game's memory. It doesn't modify the game, inject code or interfere with its networking.</p>
+      <p>It only works with Seamless Co-op and won't attach to the normal online version of Dark Souls III.</p>
+      <p>I realise downloading something that reads game memory might raise a few eyebrows, so I've tried to be as transparent as possible about how it works. The project is open source, and the technical details are available on GitHub.</p>
     </div>
     <div class="safety-grid">
       <div class="vow" aria-labelledby="vow-title">
@@ -297,16 +301,15 @@
           <li><span>Send your data anywhere.<small>The live page is served on 127.0.0.1 only.</small></span></li>
           <li><span>Ship any of the game's files.<small>It reads item, map and name data from your own install.</small></span></li>
         </ol>
-        <p class="sig">— Matt, who builds it</p>
       </div>
 
       <div>
         <dl class="facts">
           <div><dt>Read-only</dt><dd>It opens the game process with read permission and nothing more.</dd></div>
           <div><dt>Seamless Co-op only</dt><dd>Seamless Co-op runs without anti-cheat. WASD checks for it and won't attach to normal online Dark Souls III.</dd></div>
-          <div><dt>Local only</dt><dd>Everything stays on your PC. The live page listens on 127.0.0.1, so nothing else on your network can reach it.</dd></div>
+          <div><dt>Local only</dt><dd>Everything stays on your PC (until I build co-op partner networking, optional feature). The live page listens on 127.0.0.1, so nothing else on your network can reach it.</dd></div>
           <div><dt>No game files shipped</dt><dd>On first run it builds its item, map and name data from your own copy of the game.</dd></div>
-          <div><dt>Open source, GPL-3.0</dt><dd>Every number it shows was checked against the game, and the <a href="https://github.com/matt-hewson/wasd">technical notes</a> document how each one is read.</dd></div>
+          <div><dt>Open source, GPL-3.0</dt><dd>Data it shows was checked against the game, and the <a href="https://github.com/matt-hewson/wasd">technical notes</a> document how each one is read.</dd></div>
           <div><dt>An honest install</dt><dd>Installs for your Windows user only, with no admin prompt. Not code-signed yet, so SmartScreen will warn you. Each release lists a SHA-256 checksum.</dd></div>
         </dl>
         <p class="unofficial">WASD is unofficial. It isn't affiliated with or endorsed by FromSoftware, Bandai Namco, Valve, or the Seamless Co-op developers.</p>
@@ -320,7 +323,7 @@
   <div class="wrap">
     <div class="sec-head">
       <p class="eyebrow">Install</p>
-      <h2 id="install-title">Five steps to the first rest</h2>
+      <h2 id="install-title">Getting started</h2>
       <p>About two minutes. No admin rights needed.</p>
     </div>
     <div class="install">
@@ -339,6 +342,8 @@
           <li><div>
             <h3>Get past SmartScreen</h3>
             <p>WASD isn't code-signed yet (certificates cost money), so Windows shows a blue warning box. That's expected.</p>
+            <p>Check the GitHub release to make sure you are happy with proceeding before pressing "Run anyway".</p>
+            <p>It is also recommended to verify the checksum in the previous step before proceeding.</p>
             <div class="smartscreen">
               <b>Windows protected your PC</b>
               <div class="seq" aria-label="Click More info, then Run anyway"><span>More info</span><span aria-hidden="true">→</span><span>Run anyway</span></div>
@@ -386,7 +391,7 @@
   <div class="wrap coop">
     <div class="coop-copy">
       <p class="eyebrow">Co-op &amp; what's next</p>
-      <h2 id="coop-title" style="margin-top:14px;font-size:clamp(36px,5vw,56px)">Two fires, one road</h2>
+      <h2 id="coop-title" style="margin-top:14px;font-size:clamp(36px,5vw,56px)">Playing with a friend</h2>
       <p>Co-op is partly built. Right now you and a partner can swap a co-op code, one line of text you paste into Discord, and see both runs side by side on the results page.</p>
       <p class="demo-code" aria-label="Example co-op code"><span>WASD-</span>AQEBAAAAxJ3kZ0Fz2wq… <span style="color:var(--muted-2)">(example)</span></p>
       <div class="split" aria-label="Results page views"><span>You</span><span>Together</span><span>Partner</span></div>
@@ -394,14 +399,14 @@
     </div>
 
     <div>
-      <p class="eyebrow" style="margin-bottom:22px">Traveller's log · matches the <a href="https://github.com/matt-hewson/wasd/blob/main/ROADMAP.md">roadmap</a></p>
+      <p class="eyebrow" style="margin-bottom:22px">What's next · matches the <a href="https://github.com/matt-hewson/wasd/blob/main/ROADMAP.md">roadmap</a></p>
       <ol class="log">
         <li class="done"><p class="when">Reached · v0.1</p><h3>Dark Souls III, solo and swapped codes</h3>
           <p>Live page, overlay, results page, spoiler tiers, missable warnings, route guidance for all 23 areas, and co-op codes.</p></li>
         <li><p class="when">Next</p><h3>A live link between two players</h3>
           <ul><li>Your partner's HP and area on the overlay</li><li>Shared found items</li><li>Warnings before one player locks the other out, like killing a boss mid-questline</li></ul></li>
-        <li><p class="when">After that</p><h3>Elden Ring, with Seamless Co-op</h3>
-          <p>The same rules: read-only, Seamless Co-op only, nothing leaves your PC.</p></li>
+        <li><p class="when">After that, maybe</p><h3>Elden Ring, with Seamless Co-op</h3>
+          <p>The same rules: read-only, Seamless Co-op only, nothing leaves your PC (until i build in coop partner networking).</p></li>
         <li class="later"><p class="when">Further off, perhaps</p><h3>DS Remastered, DS2, Sekiro</h3>
           <p>The order depends on what people ask for.</p></li>
       </ol>
@@ -410,14 +415,37 @@
   </div>
 </section>
 
-<!-- 7. Support -->
+<hr class="rule">
+
+<!-- 7. About -->
+<section class="sec" id="about" aria-labelledby="about-title">
+  <div class="wrap about">
+    <div class="about-head">
+      <p class="eyebrow">About</p>
+      <h2 id="about-title" style="margin-top:14px;font-size:clamp(36px,5vw,56px)">About WASD</h2>
+    </div>
+    <div class="about-copy">
+      <p>WASD started as something I wanted for my own playthroughs.</p>
+      <p>I kept finding myself checking wikis to see what I'd missed, looking up boss weaknesses or trying to work out where I was supposed to go next. I figured it'd be useful to have that information available while playing, without having to constantly switch between windows.</p>
+      <p>I'm developing it on my own in my spare time, with help from Claude Code. I've used it extensively to build both the application and this website. I'm responsible for the ideas, decisions, testing and ongoing development, but I want to be upfront about the fact that AI has played a significant part in getting it built.</p>
+      <p>It's free and open source, and I'd like to keep improving it based on what people actually find useful. If you run into a problem or have an idea, GitHub is the best place to get in touch.</p>
+      <ul class="reach" aria-label="Ways to get in touch">
+        <li><span>Found a bug?</span> <a href="https://github.com/matt-hewson/wasd/issues">Open an issue on GitHub</a></li>
+        <li><span>Got an idea?</span> <a href="https://github.com/matt-hewson/wasd/discussions">Start a discussion</a></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- 8. Support -->
 <section class="sec support" id="support" aria-labelledby="support-title">
   <div class="wrap support-in">
     <div class="soapstone">
-      <p class="eyebrow">A message, left by the fire</p>
-      <h2 id="support-title">Try kindness</h2>
-      <p>WASD is free. It has no ads, no accounts and no paid tier, and it will stay that way. It's built by one person in their spare time.</p>
-      <p>If it's earned a place next to your game, a coffee helps keep the work going: more areas checked, more bugs fixed, Elden Ring sooner.</p>
+      <p class="eyebrow">A message</p>
+      <h2 id="support-title">Support development</h2>
+      <p>WASD is free, with no ads, accounts or paid features. I don't intend to change that.</p>
+      <p>I'm building and maintaining it in my spare time, so if you've found it useful and want to support the project, I've set up a Ko-fi page.</p>
+      <p>There's absolutely no obligation to donate. Bug reports, suggestions and feedback are just as welcome.</p>
     </div>
     <div class="coffee-wrap">
       <a class="coffee" href="https://ko-fi.com/wasdcompanion" rel="noopener">
