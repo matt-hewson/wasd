@@ -676,6 +676,7 @@
     `<button class="u" data-act="theme" data-v="${id}" title="Theme">${l}</button>`).join("")}</div>`;
   const tierSeg = () => `<div class="seg tier" role="group" aria-label="Spoiler tier" data-title="tierDesc">${TIERS.map((l, i) =>
     `<button class="u" data-act="tier" data-v="${i}" title="${TIERDESC[i]}">${l}</button>`).join("")}</div>`;
+  const resultsBtn = () => `<a class="u hbtn" href="/results" target="_blank" rel="noopener" title="Your playthrough's results, and co-op: swap codes with your partner and compare">Results</a>`;
   const ovBtn = () => `<button class="u hbtn" data-act="ovtoggle" aria-haspopup="dialog">Overlay ▾</button>`;
   const quitBtn = () => `<button class="u hbtn quit" data-act="quit" title="Close the guide (overlay and this page's data); the session is saved">Quit</button>`;
   const pill = () => `<div class="pill" data-pill><span class="dot"></span><span data-b="status"></span></div>`;
@@ -700,7 +701,7 @@
     <div class="nm" data-b="character"></div><div class="vr"></div>
     <div class="where"><div class="area" data-b="area"></div>
       <div class="rest"><span data-show="bonfire">Rested at <span class="bf" data-b="bonfire"></span></span></div></div>
-    ${pill()}<div class="sp"></div>${themeSeg()}<span class="vr2"></span>${tierSeg()}${ovBtn()}${quitBtn()}
+    ${pill()}<div class="sp"></div>${themeSeg()}<span class="vr2"></span>${tierSeg()}${resultsBtn()}${ovBtn()}${quitBtn()}
   </header>
   <div class="body">
     <div class="panel" data-p="char" style="grid-area:char">${ph("char", "Character")}<div class="pb">${headA("Character", "", "char")}
@@ -773,7 +774,7 @@
     <span class="nm" data-b="character"></span>
     <span class="wtxt"><span data-b="area"></span><span data-show="bonfire"> <span class="sl">/</span> bonfire <span data-b="bonfire"></span></span></span>
     ${pill()}<span class="sp"></span>
-    <span class="hl">THEME</span>${themeSeg()}<span class="vr2"></span><span class="hl">SPOILERS</span>${tierSeg()}${ovBtn()}${quitBtn()}
+    <span class="hl">THEME</span>${themeSeg()}<span class="vr2"></span><span class="hl">SPOILERS</span>${tierSeg()}${resultsBtn()}${ovBtn()}${quitBtn()}
   </header>
   <div class="panel vit" data-p="char">${ph("char", "Character")}<div class="pb vgrid">
     <div class="vbars">${bar("HP", "hp")}${bar("FP", "fp")}${bar("Stamina", "st")}${loadBar()}</div>
@@ -843,7 +844,7 @@
   <header class="hdr">
     <span class="nm" data-b="character"></span>${pill()}<span class="vr"></span>
     <span class="area" data-b="area"></span><span class="rest"><span data-show="bonfire">last rest · <span data-b="bonfire"></span></span></span>
-    <span class="sp"></span>${themeSeg()}${tierSeg()}${ovBtn()}${quitBtn()}
+    <span class="sp"></span>${themeSeg()}${tierSeg()}${resultsBtn()}${ovBtn()}${quitBtn()}
   </header>
   <div class="body">
     <div class="panel maplayer" data-p="map"><button class="u ph" data-act="mute" data-panel="map">(Map)</button>

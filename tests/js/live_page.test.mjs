@@ -5,7 +5,8 @@
 // from Category -- plus the small text parsers.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { load, definition, scriptOf } from "./extract.mjs";
+import { readFileSync } from "node:fs";
+import { load, definition, scriptOf, ROOT } from "./extract.mjs";
 
 const { derive, vagueLine, parseUpgrade } = load("templates/live.html", [
   "esc", "num", "MINUS", "dur", "pct", "ATTR", "ATTR_FULL", "DMG", "DMGS", "STAT", "TIERDESC",
@@ -152,6 +153,13 @@ test("footer shows the app version from the state", () => {
 
 test("every theme's footer has the version slot", () => {
   assert.match(definition(scriptOf("templates/live.html"), "footer"), /data-b="version"/);
+});
+
+test("every theme's header opens the results page, and co-op lives only there", () => {
+  const src = scriptOf("templates/live.html");
+  assert.match(definition(src, "resultsBtn"), /href="\/results"/);
+  assert.equal((src.match(/\$\{resultsBtn\(\)\}/g) || []).length, 3);
+  assert.doesNotMatch(readFileSync(`${ROOT}/templates/live.html`, "utf8"), /coop/i);
 });
 
 test("vagueLine", () => {

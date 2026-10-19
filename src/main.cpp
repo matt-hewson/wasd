@@ -225,6 +225,7 @@
 #include <share.h>  // _SH_DENYWR (session log readable while recording)
 #include <shobjidl.h>  // IFileOpenDialog, SetCurrentProcessExplicitAppUserModelID (WASD.exe)
 
+#include <cctype>
 #include <cstdarg>
 #include <chrono>
 #include <cmath>
@@ -237,6 +238,8 @@
 #include <fstream>
 #include <functional>
 #include <iterator>
+#include <mutex>
+#include <set>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -3264,7 +3267,11 @@ std::string FormatDuration(double seconds) {
 // Event types ("t" = session seconds, the same clock as SessionStats):
 //   start    character, level, deathsTotal, playTimeMs, startedAt
 //   enter    area                                   (area change)
-//   death    area, x, y, z, soulsLost, deathsTotal
+//   death    area, x, y, z, soulsLost, deathsTotal, and boss + bossName when
+//            an undefeated boss was within kBossFightRange (an attempt)
+//   boss     flag, name, area, playTimeMs        (a boss's defeat flag set)
+//   gear     slot ("R" / "L"), id, name, upgrade (the weapon in hand changed;
+//            also once at the start)
 //   bloodstain souls                                (recovered)
 //   level    from, to
 //   sample   level, souls, deathsTotal, area, playTimeMs   (every 30s)
@@ -3277,6 +3284,10 @@ constexpr double kMinRecordedSessionSeconds = 60.0;
 constexpr double kSessionSampleSeconds = 30.0;
 constexpr double kTrailMinStep = 1.0;      // game units (~1 m)
 constexpr double kTrailMinSeconds = 0.5;
+// A death within this many metres of an undefeated boss's place (its
+// enemies.tsv position, in its own area) counts as an attempt at it. An
+// approximation: there's no live read of "a boss fight is on" yet.
+constexpr float kBossFightRange = 70.0f;
 
 // Character name: PlayerGameData + 0x88, UTF-16 (The Grand Archives'
 // "Character Name"); verified live 2026-10-06.
@@ -3491,6 +3502,19 @@ std::wstring SafeFolderName(const std::string& name) {
   return out.empty() ? L"Unknown" : out;
 }
 
+// One boss as the session recorder sees it (Bosses() order).
+struct SessionBoss {
+  uint32_t flag = 0;
+  std::string name, area;
+  bool defeated = false;
+};
+// The weapon in one hand; id -1 = not read yet.
+struct SessionWeapon {
+  int32_t id = -1;  // the weapon's param id (upgrade in the last two digits)
+  std::string name;
+  int upgrade = 0;
+};
+
 struct SessionContext {
   int32_t level = 0, souls = 0, deathNum = 0;
   uint32_t playTimeMs = 0;
@@ -3498,6 +3522,10 @@ struct SessionContext {
   PlayerPose pose;
   int32_t lastBonfireId = -1;
   std::string lastBonfireName;
+  std::vector<SessionBoss> bosses;  // every boss's defeat flag; empty = not read yet
+  uint32_t bossInReach = 0;         // the undefeated boss you're near (BossInReach), 0 = none
+  std::string bossInReachName;
+  SessionWeapon hands[2];           // right, left
 };
 
 // Columns of sessions/<character>/<stamp>.perf.csv (see SessionLog::WritePerf):
@@ -3511,8 +3539,13 @@ class SessionLog {
  public:
   bool enabled = false;
   std::wstring path;  // set once the file is opened
+  std::vector<std::string>* capture = nullptr;  // tests: lines go here, never to a file
 
   void Write(const std::string& line, double sessionSeconds) {
+    if (capture) {
+      capture->push_back(line);
+      return;
+    }
     if (!enabled) return;
     if (!file_) {
       pending_.push_back(line);
@@ -3594,6 +3627,8 @@ struct SessionTracker {
   float trailX = 0, trailY = 0, trailZ = 0;
   double trailT = -1e9;
   int32_t lastBonfireId = -1;
+  std::vector<bool> lastBossDefeated;  // from the previous read, Bosses() order
+  int32_t lastHandIds[2] = {-1, -1};
 
   bool Tick(double dt, const SessionContext& c) {
     char buf[512];
@@ -3646,12 +3681,40 @@ struct SessionTracker {
       }
     }
     if (stats.eventLost >= 0) {
+      std::string boss;
+      if (c.bossInReach)
+        boss = ",\"boss\":" + std::to_string(c.bossInReach) + ",\"bossName\":" + JsonString(c.bossInReachName);
       std::snprintf(buf, sizeof(buf),
                     "{\"type\":\"death\",\"t\":%.1f,\"area\":%s,\"x\":%.2f,\"y\":%.2f,\"z\":%.2f,"
-                    "\"soulsLost\":%lld,\"deathsTotal\":%d}",
+                    "\"soulsLost\":%lld,\"deathsTotal\":%d%s}",
                     t, JsonString(lastArea).c_str(), c.pose.x, c.pose.y, c.pose.z,
-                    static_cast<long long>(stats.eventLost), c.deathNum);
+                    static_cast<long long>(stats.eventLost), c.deathNum, boss.c_str());
       log.Write(buf, t);
+    }
+    // Boss kills: a defeat flag that was clear on the last read and is set
+    // now. The first read only sets the baseline.
+    if (!c.bosses.empty()) {
+      if (lastBossDefeated.size() == c.bosses.size()) {
+        for (size_t k = 0; k < c.bosses.size(); ++k) {
+          if (lastBossDefeated[k] || !c.bosses[k].defeated) continue;
+          std::snprintf(buf, sizeof(buf),
+                        "{\"type\":\"boss\",\"t\":%.1f,\"flag\":%u,\"name\":%s,\"area\":%s,\"playTimeMs\":%u}", t,
+                        c.bosses[k].flag, JsonString(c.bosses[k].name).c_str(), JsonString(c.bosses[k].area).c_str(),
+                        c.playTimeMs);
+          log.Write(buf, t);
+        }
+      }
+      lastBossDefeated.clear();
+      for (const auto& b : c.bosses) lastBossDefeated.push_back(b.defeated);
+    }
+    // The weapon in each hand: logged when it changes, and once at the start.
+    for (int h = 0; h < 2; ++h) {
+      const SessionWeapon& w = c.hands[h];
+      if (w.id == -1 || w.id == lastHandIds[h]) continue;
+      std::snprintf(buf, sizeof(buf), "{\"type\":\"gear\",\"t\":%.1f,\"slot\":\"%s\",\"id\":%d,\"name\":%s,\"upgrade\":%d}",
+                    t, h == 0 ? "R" : "L", w.id, JsonString(w.name).c_str(), w.upgrade);
+      log.Write(buf, t);
+      lastHandIds[h] = w.id;
     }
     if (stats.eventRecovered >= 0) {
       std::snprintf(buf, sizeof(buf), "{\"type\":\"bloodstain\",\"t\":%.1f,\"souls\":%lld}", t,
@@ -6143,6 +6206,1408 @@ constexpr wchar_t kWindowClassName[] = L"WasdWindow";
 //
 // Structured copies of what the live page shows, filled by the polling
 // worker and served as JSON by the page server (see LiveServerMain).
+// ---- co-op: the shared state and its binary form -----------------------
+//
+// What one player's tool shares with their partner's: a small, versioned
+// model (SharedGameState) of values the reader already has, never the
+// reader's own structs or anything from process memory as such. It travels
+// as a binary packet:
+//
+//   byte 0      protocol version (kCoopProtocolVersion)
+//   byte 1      message type (CoopMessage)
+//   bytes 2-5   sequence number, u32 little-endian
+//   bytes 6..   payload, bit-packed, least significant bit first
+//
+// For now partners swap a FullSnapshot by copy and paste: the packet plus
+// its CRC-32 (little-endian), in base64url, after "WASD-" (CoopToText).
+// The live link is meant to send the same packets as binary frames.
+//
+// FullSnapshot payload, protocol 1 (field: bits):
+//   captured at, Unix seconds UTC: 32
+//   character name: 6 (n = bytes of UTF-8, at most 48), then n x 8
+//   soul level: 16; HP, max HP, FP, max FP, stamina, max stamina: 16 each
+//   attributes (Vigor, Attunement, Endurance, Vitality, Strength, Dexterity,
+//     Intelligence, Faith, Luck): 8 each
+//   souls held: 32; deaths (the game's counter): 32; play time, seconds: 32;
+//     NG cycle (0 = first journey): 8
+//   map id (mAA_BB_CC_DD packed): 32; play region id: 32; last bonfire id: 32
+//   position known: 1; if set x, y, z, facing (radians): 32 each, IEEE float
+//   four flag sets, in this order: bosses defeated, key items obtained,
+//     key items held, world pickups found. Each: list fingerprint 32,
+//     count 12, then count bits
+//   recorded time and deaths per area (from the saved sessions): area list
+//     fingerprint 32, count 6, then per area: index in the list 6,
+//     seconds 24, deaths 16
+//   level over play time: count 6, then per point: play time in minutes 20,
+//     level 10
+//   recorded totals: seconds, deaths, souls lost, souls recovered, souls
+//     gained, longest session in seconds: 32 each
+//   sessions, newest first: count 6, area bits m 6, weapons 1; then per
+//     session: start (Unix minutes) 28, length in minutes 12, deaths 12,
+//     souls gained 24, level at start 10, at end 10, the areas visited (m
+//     bits, one per area-list entry), bosses killed 6, and if weapons:
+//     main hand weapon id / 100 18, its upgrade 5, off hand the same
+//   boss records: count 6, then per boss killed in a recorded session: its
+//     index in the boss list 6, deaths before the kill 10, minutes from the
+//     first attempt to the kill 16 (65535: no attempts), the session it fell
+//     in 6 (an index into the sessions above; 63: not among them), kill
+//     time (Unix minutes) 28
+//   records: longest life in seconds 24, its session 6, its area 6 (63:
+//     none); first death, seconds into the recorded time 24 (16777215:
+//     none), its session 6, its area 6
+//   zero bits up to the byte boundary, and nothing after.
+// The sessions and boss records let a receiver work out the rest of the
+// pair report (sessions played together, per-session figures, first-try
+// and fastest kills); the code only carries what it couldn't.
+// A flag set's bits follow one of the tool's lists (bosses.tsv, key_items.tsv,
+// the pickups read from the game); the fingerprint (FNV-1a of the list's ids
+// and length) tells the receiver whether its own list is the same one. The
+// area list is region_areas.tsv's area names, sorted (CoopAreaList).
+// A layout, once released, never changes: a new layout is a new version.
+constexpr uint8_t kCoopProtocolVersion = 1;
+std::string ClockDirection(const PlayerPose& pose, float dx, float dz);
+enum class CoopMessage : uint8_t {
+  kHello = 1,
+  kFullSnapshot = 2,
+  kDelta = 3,
+  kHeartbeat = 4,
+  kRequestFullSnapshot = 5,
+  kDisconnect = 6,
+};
+constexpr size_t kCoopHeaderBytes = 6;
+constexpr size_t kCoopMaxPacketBytes = 2048;
+constexpr size_t kCoopMaxNameBytes = 48;
+constexpr size_t kCoopMaxFlags = 4095;  // 12-bit count
+constexpr size_t kCoopMaxAreas = 63;    // 6-bit count and index
+constexpr size_t kCoopMaxLevelPoints = 32;
+constexpr size_t kCoopMaxSessions = 40;     // newest first; FitCoopCode may send fewer
+constexpr uint8_t kCoopNone6 = 63;          // a 6-bit index meaning "none"
+constexpr size_t kCoopMaxCodeChars = 2000;  // one chat message (Discord's limit)
+constexpr const char* kCoopTextPrefix = "WASD-";
+
+class CoopBitWriter {
+ public:
+  void Write(uint32_t value, int bits) {  // the low `bits` bits of value, 1-32
+    for (int k = 0; k < bits; ++k) {
+      if (bitCount_ % 8 == 0) bytes_.push_back(0);
+      if ((value >> k) & 1u) bytes_.back() = static_cast<uint8_t>(bytes_.back() | (1u << (bitCount_ % 8)));
+      ++bitCount_;
+    }
+  }
+  void WriteBool(bool v) { Write(v ? 1u : 0u, 1); }
+  const std::vector<uint8_t>& Bytes() const { return bytes_; }
+  size_t BitCount() const { return bitCount_; }
+
+ private:
+  std::vector<uint8_t> bytes_;
+  size_t bitCount_ = 0;
+};
+
+class CoopBitReader {
+ public:
+  CoopBitReader(const uint8_t* data, size_t size) : data_(data), bits_(size * 8) {}
+  // The next `bits` bits (1-32); 0 and !Ok() once past the end.
+  uint32_t Read(int bits) {
+    if (pos_ + static_cast<size_t>(bits) > bits_) {
+      ok_ = false;
+      pos_ = bits_;
+      return 0;
+    }
+    uint32_t v = 0;
+    for (int k = 0; k < bits; ++k, ++pos_)
+      if ((data_[pos_ / 8] >> (pos_ % 8)) & 1u) v |= 1u << k;
+    return v;
+  }
+  bool ReadBool() { return Read(1) != 0; }
+  bool Ok() const { return ok_; }
+  // Only zero padding is left, and less than a byte of it.
+  bool AtCleanEnd() const {
+    if (!ok_ || bits_ - pos_ >= 8) return false;
+    for (size_t p = pos_; p < bits_; ++p)
+      if ((data_[p / 8] >> (p % 8)) & 1u) return false;
+    return true;
+  }
+
+ private:
+  const uint8_t* data_;
+  size_t bits_, pos_ = 0;
+  bool ok_ = true;
+};
+
+// Booleans over one of the tool's lists, in list order.
+struct CoopFlagSet {
+  uint32_t fingerprint = 0;
+  std::vector<bool> bits;
+  bool operator==(const CoopFlagSet& o) const { return fingerprint == o.fingerprint && bits == o.bits; }
+  int CountOn() const { return static_cast<int>(std::count(bits.begin(), bits.end(), true)); }
+};
+
+uint32_t CoopFingerprint(const std::vector<uint32_t>& ids) {
+  uint32_t h = 2166136261u;
+  auto mix = [&](uint32_t v) {
+    for (int k = 0; k < 4; ++k) h = (h ^ ((v >> (8 * k)) & 0xFFu)) * 16777619u;
+  };
+  mix(static_cast<uint32_t>(ids.size()));
+  for (uint32_t id : ids) mix(id);
+  return h;
+}
+
+// Recorded play in one area (an index into CoopAreaList), summed over the
+// saved sessions.
+struct CoopAreaEntry {
+  uint8_t index = 0;
+  uint32_t seconds = 0;  // 24 bits on the wire
+  uint16_t deaths = 0;
+  bool operator==(const CoopAreaEntry& o) const {
+    return index == o.index && seconds == o.seconds && deaths == o.deaths;
+  }
+};
+struct CoopLevelPoint {
+  uint32_t minutes = 0;  // play time, 20 bits on the wire
+  uint16_t level = 0;    // 10 bits
+  bool operator==(const CoopLevelPoint& o) const { return minutes == o.minutes && level == o.level; }
+};
+
+// One recorded session, as the code sends it.
+struct CoopSessionSummary {
+  uint32_t startMin = 0;  // Unix minutes (UTC); 0 = unknown
+  uint16_t minutes = 0, deaths = 0;
+  uint32_t gained = 0;
+  uint16_t levelStart = 0, levelEnd = 0;
+  uint64_t areaBits = 0;  // bit k: area-list entry k visited
+  uint8_t kills = 0;
+  uint32_t weapon[2] = {};  // main, off hand: the weapon held longest, param id / 100 (0 = none)
+  uint8_t upgrade[2] = {};
+  bool operator==(const CoopSessionSummary& o) const {
+    return startMin == o.startMin && minutes == o.minutes && deaths == o.deaths && gained == o.gained &&
+           levelStart == o.levelStart && levelEnd == o.levelEnd && areaBits == o.areaBits && kills == o.kills &&
+           weapon[0] == o.weapon[0] && weapon[1] == o.weapon[1] && upgrade[0] == o.upgrade[0] &&
+           upgrade[1] == o.upgrade[1];
+  }
+};
+// A boss killed in a recorded session.
+struct CoopBossRecord {
+  uint8_t boss = 0;         // index in the boss list (the bosses-defeated flag set's)
+  uint16_t deaths = 0;      // attempts before the kill
+  uint16_t ttkMin = 0xFFFF;  // minutes from the first attempt to the kill; 0xFFFF = no attempts
+  uint8_t session = kCoopNone6;  // index into sessions; kCoopNone6 = not among them
+  uint32_t killMin = 0;     // Unix minutes
+  bool operator==(const CoopBossRecord& o) const {
+    return boss == o.boss && deaths == o.deaths && ttkMin == o.ttkMin && session == o.session && killMin == o.killMin;
+  }
+};
+
+struct SharedGameState {
+  uint32_t capturedUtc = 0;
+  std::string characterName;  // identifying: anything that records this state must strip it
+  uint16_t level = 0;
+  uint16_t hp = 0, maxHp = 0, fp = 0, maxFp = 0, stamina = 0, maxStamina = 0;
+  uint8_t attrs[9] = {};  // Vigor ... Luck
+  uint32_t souls = 0, deaths = 0, playSeconds = 0;
+  uint8_t clearCount = 0;  // NG cycle
+  uint32_t mapId = 0;
+  int32_t playRegionId = 0;
+  int32_t lastBonfireId = -1;
+  bool havePose = false;
+  float x = 0, y = 0, z = 0, facing = 0;
+  CoopFlagSet bossesDefeated, keyItemsObtained, keyItemsHeld, pickupsFound;
+  uint32_t areaListFingerprint = 0;
+  std::vector<CoopAreaEntry> areas;      // only areas with recorded time or deaths, in the order first visited
+  std::vector<CoopLevelPoint> levels;    // oldest first
+  // Recorded seconds, deaths, souls lost, recovered, gained, longest session (s).
+  uint32_t totals[6] = {};
+  uint8_t sessionAreaBits = 0;  // how many area bits each session carries (the area list's size)
+  bool sessionWeapons = false;  // whether the sessions carry weapons
+  std::vector<CoopSessionSummary> sessions;  // newest first
+  std::vector<CoopBossRecord> bossRecords;
+  uint32_t lifeSec = 0;  // the longest stretch of a session without dying
+  uint8_t lifeSession = kCoopNone6, lifeArea = kCoopNone6;
+  uint32_t firstDeathAt = 0xFFFFFF;  // seconds into the recorded time; 0xFFFFFF = none
+  uint8_t firstDeathSession = kCoopNone6, firstDeathArea = kCoopNone6;
+
+  bool operator==(const SharedGameState& o) const {
+    return capturedUtc == o.capturedUtc && characterName == o.characterName && level == o.level && hp == o.hp &&
+           maxHp == o.maxHp && fp == o.fp && maxFp == o.maxFp && stamina == o.stamina &&
+           maxStamina == o.maxStamina && std::equal(attrs, attrs + 9, o.attrs) && souls == o.souls &&
+           deaths == o.deaths && playSeconds == o.playSeconds && clearCount == o.clearCount &&
+           mapId == o.mapId && playRegionId == o.playRegionId &&
+           lastBonfireId == o.lastBonfireId && havePose == o.havePose &&
+           (!havePose || (x == o.x && y == o.y && z == o.z && facing == o.facing)) &&
+           bossesDefeated == o.bossesDefeated && keyItemsObtained == o.keyItemsObtained &&
+           keyItemsHeld == o.keyItemsHeld && pickupsFound == o.pickupsFound &&
+           areaListFingerprint == o.areaListFingerprint && areas == o.areas && levels == o.levels &&
+           std::equal(totals, totals + 6, o.totals) && sessionAreaBits == o.sessionAreaBits &&
+           sessionWeapons == o.sessionWeapons && sessions == o.sessions && bossRecords == o.bossRecords &&
+           lifeSec == o.lifeSec && lifeSession == o.lifeSession && lifeArea == o.lifeArea &&
+           firstDeathAt == o.firstDeathAt && firstDeathSession == o.firstDeathSession &&
+           firstDeathArea == o.firstDeathArea;
+  }
+};
+
+uint16_t CoopClampU16(int64_t v) { return static_cast<uint16_t>(v < 0 ? 0 : v > 0xFFFF ? 0xFFFF : v); }
+
+// Cut to at most `maxBytes` without splitting a UTF-8 character.
+std::string CoopTruncateUtf8(const std::string& s, size_t maxBytes) {
+  if (s.size() <= maxBytes) return s;
+  size_t n = maxBytes;
+  while (n > 0 && (static_cast<unsigned char>(s[n]) & 0xC0) == 0x80) --n;
+  return s.substr(0, n);
+}
+
+std::vector<uint8_t> EncodeCoopSnapshot(const SharedGameState& s, uint32_t sequence) {
+  std::vector<uint8_t> out = {kCoopProtocolVersion, static_cast<uint8_t>(CoopMessage::kFullSnapshot)};
+  for (int k = 0; k < 4; ++k) out.push_back(static_cast<uint8_t>(sequence >> (8 * k)));
+  CoopBitWriter w;
+  auto f32 = [&](float f) {
+    uint32_t bits = 0;
+    std::memcpy(&bits, &f, sizeof(bits));
+    w.Write(bits, 32);
+  };
+  w.Write(s.capturedUtc, 32);
+  std::string name = CoopTruncateUtf8(s.characterName, kCoopMaxNameBytes);
+  w.Write(static_cast<uint32_t>(name.size()), 6);
+  for (unsigned char c : name) w.Write(c, 8);
+  for (uint16_t v : {s.level, s.hp, s.maxHp, s.fp, s.maxFp, s.stamina, s.maxStamina}) w.Write(v, 16);
+  for (uint8_t a : s.attrs) w.Write(a, 8);
+  w.Write(s.souls, 32);
+  w.Write(s.deaths, 32);
+  w.Write(s.playSeconds, 32);
+  w.Write(s.clearCount, 8);
+  w.Write(s.mapId, 32);
+  w.Write(static_cast<uint32_t>(s.playRegionId), 32);
+  w.Write(static_cast<uint32_t>(s.lastBonfireId), 32);
+  w.WriteBool(s.havePose);
+  if (s.havePose) {
+    f32(s.x);
+    f32(s.y);
+    f32(s.z);
+    f32(s.facing);
+  }
+  for (const CoopFlagSet* set : {&s.bossesDefeated, &s.keyItemsObtained, &s.keyItemsHeld, &s.pickupsFound}) {
+    size_t n = (std::min)(set->bits.size(), kCoopMaxFlags);
+    w.Write(set->fingerprint, 32);
+    w.Write(static_cast<uint32_t>(n), 12);
+    for (size_t k = 0; k < n; ++k) w.WriteBool(set->bits[k]);
+  }
+  w.Write(s.areaListFingerprint, 32);
+  std::vector<CoopAreaEntry> areas;
+  for (const auto& a : s.areas)
+    if (a.index < kCoopMaxAreas && areas.size() < kCoopMaxAreas) areas.push_back(a);
+  w.Write(static_cast<uint32_t>(areas.size()), 6);
+  for (const auto& a : areas) {
+    w.Write(a.index, 6);
+    w.Write((std::min)(a.seconds, 0xFFFFFFu), 24);
+    w.Write(a.deaths, 16);
+  }
+  size_t levels = (std::min)(s.levels.size(), kCoopMaxLevelPoints);
+  w.Write(static_cast<uint32_t>(levels), 6);
+  for (size_t k = 0; k < levels; ++k) {
+    w.Write((std::min)(s.levels[k].minutes, 0xFFFFFu), 20);
+    w.Write((std::min)(s.levels[k].level, uint16_t{1023}), 10);
+  }
+  for (uint32_t v : s.totals) w.Write(v, 32);
+  const size_t sessions = (std::min)(s.sessions.size(), (std::min)(kCoopMaxSessions, size_t{63}));
+  const int areaBits = (std::min)(static_cast<int>(s.sessionAreaBits), 63);
+  w.Write(static_cast<uint32_t>(sessions), 6);
+  w.Write(static_cast<uint32_t>(areaBits), 6);
+  w.WriteBool(s.sessionWeapons);
+  auto clampTo = [](uint64_t v, int bits) { return static_cast<uint32_t>((std::min)(v, (uint64_t{1} << bits) - 1)); };
+  for (size_t k = 0; k < sessions; ++k) {
+    const CoopSessionSummary& x = s.sessions[k];
+    w.Write(clampTo(x.startMin, 28), 28);
+    w.Write(clampTo(x.minutes, 12), 12);
+    w.Write(clampTo(x.deaths, 12), 12);
+    w.Write(clampTo(x.gained, 24), 24);
+    w.Write(clampTo(x.levelStart, 10), 10);
+    w.Write(clampTo(x.levelEnd, 10), 10);
+    for (int b = 0; b < areaBits; ++b) w.WriteBool((x.areaBits >> b) & 1u);
+    w.Write(clampTo(x.kills, 6), 6);
+    if (s.sessionWeapons) {
+      for (int h = 0; h < 2; ++h) {
+        w.Write(clampTo(x.weapon[h], 18), 18);
+        w.Write(clampTo(x.upgrade[h], 5), 5);
+      }
+    }
+  }
+  const size_t records = (std::min)(s.bossRecords.size(), size_t{63});
+  w.Write(static_cast<uint32_t>(records), 6);
+  for (size_t k = 0; k < records; ++k) {
+    const CoopBossRecord& r = s.bossRecords[k];
+    w.Write(clampTo(r.boss, 6), 6);
+    w.Write(clampTo(r.deaths, 10), 10);
+    w.Write(r.ttkMin, 16);
+    w.Write(r.session < sessions ? r.session : kCoopNone6, 6);
+    w.Write(clampTo(r.killMin, 28), 28);
+  }
+  w.Write(clampTo(s.lifeSec, 24), 24);
+  w.Write(s.lifeSession < sessions ? s.lifeSession : kCoopNone6, 6);
+  w.Write(clampTo(s.lifeArea, 6), 6);
+  w.Write(clampTo(s.firstDeathAt, 24), 24);
+  w.Write(s.firstDeathSession < sessions ? s.firstDeathSession : kCoopNone6, 6);
+  w.Write(clampTo(s.firstDeathArea, 6), 6);
+  out.insert(out.end(), w.Bytes().begin(), w.Bytes().end());
+  return out;
+}
+
+struct CoopPacket {
+  bool ok = false;
+  std::string error;  // why it was refused, for the player
+  uint8_t version = 0;
+  CoopMessage type = CoopMessage::kHello;
+  uint32_t sequence = 0;
+  SharedGameState state;  // FullSnapshot only
+};
+
+// Strict: anything that isn't exactly a protocol-1 FullSnapshot is refused
+// with a reason, never half-applied.
+CoopPacket DecodeCoopPacket(const uint8_t* data, size_t size) {
+  CoopPacket p;
+  if (size < kCoopHeaderBytes) {
+    p.error = size == 0 ? "empty" : "too short to be a WASD packet";
+    return p;
+  }
+  if (size > kCoopMaxPacketBytes) {
+    p.error = "too long (" + std::to_string(size) + " bytes)";
+    return p;
+  }
+  p.version = data[0];
+  if (p.version != kCoopProtocolVersion) {
+    p.error = "made by a different WASD version (protocol " + std::to_string(p.version) + "; this one reads " +
+              std::to_string(kCoopProtocolVersion) + "): both of you need the same version";
+    return p;
+  }
+  if (data[1] < 1 || data[1] > 6) {
+    p.error = "unknown message type " + std::to_string(data[1]);
+    return p;
+  }
+  p.type = static_cast<CoopMessage>(data[1]);
+  p.sequence = static_cast<uint32_t>(data[2]) | static_cast<uint32_t>(data[3]) << 8 |
+               static_cast<uint32_t>(data[4]) << 16 | static_cast<uint32_t>(data[5]) << 24;
+  if (p.type != CoopMessage::kFullSnapshot) {
+    p.error = "not a snapshot (message type " + std::to_string(data[1]) + ")";
+    return p;
+  }
+  CoopBitReader r(data + kCoopHeaderBytes, size - kCoopHeaderBytes);
+  auto f32 = [&]() {
+    uint32_t bits = r.Read(32);
+    float f = 0;
+    std::memcpy(&f, &bits, sizeof(f));
+    return f;
+  };
+  SharedGameState& s = p.state;
+  s.capturedUtc = r.Read(32);
+  uint32_t nameLen = r.Read(6);
+  if (nameLen > kCoopMaxNameBytes) {
+    p.error = "bad character name length " + std::to_string(nameLen);
+    return p;
+  }
+  for (uint32_t k = 0; k < nameLen && r.Ok(); ++k) {
+    char c = static_cast<char>(r.Read(8));
+    if (static_cast<unsigned char>(c) < 0x20) {
+      p.error = "control character in the character name";
+      return p;
+    }
+    s.characterName += c;
+  }
+  for (uint16_t* v : {&s.level, &s.hp, &s.maxHp, &s.fp, &s.maxFp, &s.stamina, &s.maxStamina})
+    *v = static_cast<uint16_t>(r.Read(16));
+  for (uint8_t& a : s.attrs) a = static_cast<uint8_t>(r.Read(8));
+  s.souls = r.Read(32);
+  s.deaths = r.Read(32);
+  s.playSeconds = r.Read(32);
+  s.clearCount = static_cast<uint8_t>(r.Read(8));
+  s.mapId = r.Read(32);
+  s.playRegionId = static_cast<int32_t>(r.Read(32));
+  s.lastBonfireId = static_cast<int32_t>(r.Read(32));
+  s.havePose = r.ReadBool();
+  if (s.havePose) {
+    s.x = f32();
+    s.y = f32();
+    s.z = f32();
+    s.facing = f32();
+    if (!std::isfinite(s.x) || !std::isfinite(s.y) || !std::isfinite(s.z) || !std::isfinite(s.facing)) {
+      p.error = "position isn't a finite number";
+      return p;
+    }
+  }
+  for (CoopFlagSet* set : {&s.bossesDefeated, &s.keyItemsObtained, &s.keyItemsHeld, &s.pickupsFound}) {
+    set->fingerprint = r.Read(32);
+    uint32_t n = r.Read(12);
+    for (uint32_t k = 0; k < n && r.Ok(); ++k) set->bits.push_back(r.ReadBool());
+  }
+  s.areaListFingerprint = r.Read(32);
+  uint32_t areaCount = r.Read(6);
+  for (uint32_t k = 0; k < areaCount && r.Ok(); ++k) {
+    CoopAreaEntry a;
+    a.index = static_cast<uint8_t>(r.Read(6));
+    a.seconds = r.Read(24);
+    a.deaths = static_cast<uint16_t>(r.Read(16));
+    for (const auto& seen : s.areas)
+      if (seen.index == a.index) {
+        p.error = "an area listed twice";
+        return p;
+      }
+    s.areas.push_back(a);
+  }
+  uint32_t levelCount = r.Read(6);
+  if (levelCount > kCoopMaxLevelPoints) {
+    p.error = "too many level points (" + std::to_string(levelCount) + ")";
+    return p;
+  }
+  for (uint32_t k = 0; k < levelCount && r.Ok(); ++k) {
+    CoopLevelPoint pt;
+    pt.minutes = r.Read(20);
+    pt.level = static_cast<uint16_t>(r.Read(10));
+    s.levels.push_back(pt);
+  }
+  for (uint32_t& v : s.totals) v = r.Read(32);
+  const uint32_t sessionCount = r.Read(6);
+  s.sessionAreaBits = static_cast<uint8_t>(r.Read(6));
+  s.sessionWeapons = r.ReadBool();
+  if (sessionCount > kCoopMaxSessions) {
+    p.error = "too many sessions (" + std::to_string(sessionCount) + ")";
+    return p;
+  }
+  for (uint32_t k = 0; k < sessionCount && r.Ok(); ++k) {
+    CoopSessionSummary x;
+    x.startMin = r.Read(28);
+    x.minutes = static_cast<uint16_t>(r.Read(12));
+    x.deaths = static_cast<uint16_t>(r.Read(12));
+    x.gained = r.Read(24);
+    x.levelStart = static_cast<uint16_t>(r.Read(10));
+    x.levelEnd = static_cast<uint16_t>(r.Read(10));
+    for (int b = 0; b < s.sessionAreaBits; ++b)
+      if (r.ReadBool()) x.areaBits |= uint64_t{1} << b;
+    x.kills = static_cast<uint8_t>(r.Read(6));
+    if (s.sessionWeapons) {
+      for (int h = 0; h < 2; ++h) {
+        x.weapon[h] = r.Read(18);
+        x.upgrade[h] = static_cast<uint8_t>(r.Read(5));
+      }
+    }
+    s.sessions.push_back(x);
+  }
+  auto sessionOk = [&](uint8_t idx) { return idx == kCoopNone6 || idx < s.sessions.size(); };
+  const uint32_t recordCount = r.Read(6);
+  for (uint32_t k = 0; k < recordCount && r.Ok(); ++k) {
+    CoopBossRecord rec;
+    rec.boss = static_cast<uint8_t>(r.Read(6));
+    rec.deaths = static_cast<uint16_t>(r.Read(10));
+    rec.ttkMin = static_cast<uint16_t>(r.Read(16));
+    rec.session = static_cast<uint8_t>(r.Read(6));
+    rec.killMin = r.Read(28);
+    if (r.Ok() && !sessionOk(rec.session)) {
+      p.error = "a boss record names a session that isn't there";
+      return p;
+    }
+    s.bossRecords.push_back(rec);
+  }
+  s.lifeSec = r.Read(24);
+  s.lifeSession = static_cast<uint8_t>(r.Read(6));
+  s.lifeArea = static_cast<uint8_t>(r.Read(6));
+  s.firstDeathAt = r.Read(24);
+  s.firstDeathSession = static_cast<uint8_t>(r.Read(6));
+  s.firstDeathArea = static_cast<uint8_t>(r.Read(6));
+  if (r.Ok() && (!sessionOk(s.lifeSession) || !sessionOk(s.firstDeathSession))) {
+    p.error = "a record names a session that isn't there";
+    return p;
+  }
+  if (!r.Ok()) {
+    p.error = "truncated (the snapshot ends early)";
+    return p;
+  }
+  if (!r.AtCleanEnd()) {
+    p.error = "unexpected data after the snapshot";
+    return p;
+  }
+  p.ok = true;
+  return p;
+}
+
+uint32_t CoopCrc32(const uint8_t* data, size_t size) {
+  uint32_t c = 0xFFFFFFFFu;
+  for (size_t i = 0; i < size; ++i) {
+    c ^= data[i];
+    for (int k = 0; k < 8; ++k) c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1u)));
+  }
+  return ~c;
+}
+
+constexpr const char* kBase64UrlAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+std::string Base64UrlEncode(const std::vector<uint8_t>& in) {
+  std::string out;
+  uint32_t acc = 0;
+  int bits = 0;
+  for (uint8_t b : in) {
+    acc = (acc << 8) | b;
+    bits += 8;
+    while (bits >= 6) {
+      bits -= 6;
+      out += kBase64UrlAlphabet[(acc >> bits) & 63u];
+    }
+  }
+  if (bits > 0) out += kBase64UrlAlphabet[(acc << (6 - bits)) & 63u];
+  return out;  // no '=' padding
+}
+
+bool Base64UrlDecode(const std::string& in, std::vector<uint8_t>* out) {
+  out->clear();
+  uint32_t acc = 0;
+  int bits = 0;
+  for (char c : in) {
+    const char* hit = std::strchr(kBase64UrlAlphabet, c);
+    if (c == '\0' || !hit) return false;
+    acc = (acc << 6) | static_cast<uint32_t>(hit - kBase64UrlAlphabet);
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out->push_back(static_cast<uint8_t>(acc >> bits));
+    }
+  }
+  return bits < 6 && (acc & ((1u << bits) - 1u)) == 0;  // leftover bits are padding zeros
+}
+
+std::string CoopToText(const std::vector<uint8_t>& packet) {
+  std::vector<uint8_t> body = packet;
+  uint32_t crc = CoopCrc32(packet.data(), packet.size());
+  for (int k = 0; k < 4; ++k) body.push_back(static_cast<uint8_t>(crc >> (8 * k)));
+  return kCoopTextPrefix + Base64UrlEncode(body);
+}
+
+// The packet inside a pasted code. Whitespace anywhere is ignored (chat
+// apps wrap long lines); anything else wrong is refused with a reason.
+bool CoopFromText(const std::string& text, std::vector<uint8_t>* packet, std::string* error) {
+  std::string t;
+  for (char c : text)
+    if (!std::isspace(static_cast<unsigned char>(c))) t += c;
+  const std::string prefix = kCoopTextPrefix;
+  if (t.compare(0, prefix.size(), prefix) != 0) {
+    *error = t.empty() ? "nothing pasted" : "not a WASD code (it starts with " + prefix + ")";
+    return false;
+  }
+  std::vector<uint8_t> body;
+  if (!Base64UrlDecode(t.substr(prefix.size()), &body) || body.size() < 4) {
+    *error = "damaged: not all of it was copied, or it was changed";
+    return false;
+  }
+  size_t n = body.size() - 4;
+  uint32_t crc = static_cast<uint32_t>(body[n]) | static_cast<uint32_t>(body[n + 1]) << 8 |
+                 static_cast<uint32_t>(body[n + 2]) << 16 | static_cast<uint32_t>(body[n + 3]) << 24;
+  if (CoopCrc32(body.data(), n) != crc) {
+    *error = "damaged: not all of it was copied, or it was changed";
+    return false;
+  }
+  body.resize(n);
+  *packet = body;
+  return true;
+}
+
+// What a decoded packet holds, as `wasd-cli.exe coop <code>` prints it.
+std::string DescribeCoopPacket(const CoopPacket& p) {
+  const SharedGameState& s = p.state;
+  char buf[256];
+  std::string out;
+  std::snprintf(buf, sizeof(buf), "protocol %u, full snapshot, sequence %u\n", p.version, p.sequence);
+  out += buf;
+  time_t t = static_cast<time_t>(s.capturedUtc);
+  std::tm tm{};
+  gmtime_s(&tm, &t);
+  std::strftime(buf, sizeof(buf), "captured   %Y-%m-%d %H:%M:%S UTC\n", &tm);
+  out += buf;
+  out += "character  " + s.characterName + "\n";
+  std::snprintf(buf, sizeof(buf), "level      %u\nHP         %u / %u\nFP         %u / %u\nstamina    %u / %u\n",
+                s.level, s.hp, s.maxHp, s.fp, s.maxFp, s.stamina, s.maxStamina);
+  out += buf;
+  std::snprintf(buf, sizeof(buf), "attributes %u %u %u %u %u %u %u %u %u  (Vig Att End Vit Str Dex Int Fth Lck)\n",
+                s.attrs[0], s.attrs[1], s.attrs[2], s.attrs[3], s.attrs[4], s.attrs[5], s.attrs[6], s.attrs[7],
+                s.attrs[8]);
+  out += buf;
+  std::snprintf(buf, sizeof(buf), "souls      %u\ndeaths     %u\nplay time  %uh %02um\njourney    NG%s\n", s.souls,
+                s.deaths, s.playSeconds / 3600, s.playSeconds / 60 % 60,
+                s.clearCount ? ("+" + std::to_string(s.clearCount)).c_str() : "");
+  out += buf;
+  std::snprintf(buf, sizeof(buf), "map        m%02u_%02u_%02u_%02u\nregion     %d\nbonfire    %d\n",
+                (s.mapId >> 24) & 0xFF, (s.mapId >> 16) & 0xFF, (s.mapId >> 8) & 0xFF, s.mapId & 0xFF,
+                s.playRegionId, s.lastBonfireId);
+  out += buf;
+  if (s.havePose)
+    std::snprintf(buf, sizeof(buf), "position   %.2f, %.2f, %.2f  facing %.3f rad\n", s.x, s.y, s.z, s.facing);
+  else
+    std::snprintf(buf, sizeof(buf), "position   unknown\n");
+  out += buf;
+  const std::pair<const char*, const CoopFlagSet*> sets[] = {{"bosses defeated", &s.bossesDefeated},
+                                                             {"key items obtained", &s.keyItemsObtained},
+                                                             {"key items held", &s.keyItemsHeld},
+                                                             {"pickups found", &s.pickupsFound}};
+  for (const auto& [label, set] : sets) {
+    std::snprintf(buf, sizeof(buf), "%-19s%d / %zu  (list %08x)\n", label, set->CountOn(), set->bits.size(),
+                  set->fingerprint);
+    out += buf;
+  }
+  uint64_t areaSeconds = 0, areaDeaths = 0;
+  for (const auto& a : s.areas) areaSeconds += a.seconds, areaDeaths += a.deaths;
+  std::snprintf(buf, sizeof(buf), "recorded   %zu area(s), %lluh %02llum, %llu death(s)  (list %08x)\n",
+                s.areas.size(), static_cast<unsigned long long>(areaSeconds / 3600),
+                static_cast<unsigned long long>(areaSeconds / 60 % 60), static_cast<unsigned long long>(areaDeaths),
+                s.areaListFingerprint);
+  out += buf;
+  {
+    uint32_t firstMin = 0, lastMin = 0;
+    for (const auto& x : s.sessions) {
+      if (!x.startMin) continue;
+      if (!firstMin || x.startMin < firstMin) firstMin = x.startMin;
+      lastMin = (std::max)(lastMin, x.startMin);
+    }
+    std::snprintf(buf, sizeof(buf),
+                  "totals     %uh %02um recorded, %u death(s), %u souls lost, %u recovered, %u gained, longest %uh %02um\n",
+                  s.totals[0] / 3600, s.totals[0] / 60 % 60, s.totals[1], s.totals[2], s.totals[3], s.totals[4],
+                  s.totals[5] / 3600, s.totals[5] / 60 % 60);
+    out += buf;
+    std::snprintf(buf, sizeof(buf), "sessions   %zu%s", s.sessions.size(), s.sessionWeapons ? ", with weapons" : "");
+    out += buf;
+    if (firstMin) {
+      time_t a = static_cast<time_t>(firstMin) * 60, b = static_cast<time_t>(lastMin) * 60;
+      std::tm ta{}, tb{};
+      gmtime_s(&ta, &a);
+      gmtime_s(&tb, &b);
+      char da[16], db[16];
+      std::strftime(da, sizeof(da), "%Y-%m-%d", &ta);
+      std::strftime(db, sizeof(db), "%Y-%m-%d", &tb);
+      out += std::string(", ") + da + " to " + db + " (UTC)";
+    }
+    out += "\n";
+    std::snprintf(buf, sizeof(buf), "bosses     %zu kill(s) recorded\n", s.bossRecords.size());
+    out += buf;
+  }
+  std::snprintf(buf, sizeof(buf), "levels     %zu point(s)", s.levels.size());
+  out += buf;
+  if (!s.levels.empty()) {
+    std::snprintf(buf, sizeof(buf), ", level %u at %uh %02um to %u at %uh %02um", s.levels.front().level,
+                  s.levels.front().minutes / 60, s.levels.front().minutes % 60, s.levels.back().level,
+                  s.levels.back().minutes / 60, s.levels.back().minutes % 60);
+    out += buf;
+  }
+  return out + "\n";
+}
+
+CoopPacket CoopDecodeText(const std::string& text) {
+  std::vector<uint8_t> packet;
+  std::string error;
+  if (!CoopFromText(text, &packet, &error)) {
+    CoopPacket p;
+    p.error = error;
+    return p;
+  }
+  return DecodeCoopPacket(packet.data(), packet.size());
+}
+
+// One flag set compared with ours. Comparable only when both follow the
+// same list; otherwise only the partner's own count means anything.
+struct CoopFlagDiff {
+  bool comparable = false;
+  int partnerOn = 0;
+  std::vector<size_t> onlyPartner, onlyMine;  // list indexes
+};
+
+CoopFlagDiff CompareCoopFlags(const CoopFlagSet& mine, const CoopFlagSet& partner) {
+  CoopFlagDiff d;
+  d.partnerOn = partner.CountOn();
+  d.comparable = mine.fingerprint == partner.fingerprint && mine.bits.size() == partner.bits.size();
+  if (!d.comparable) return d;
+  for (size_t k = 0; k < mine.bits.size(); ++k) {
+    if (partner.bits[k] && !mine.bits[k]) d.onlyPartner.push_back(k);
+    if (mine.bits[k] && !partner.bits[k]) d.onlyMine.push_back(k);
+  }
+  return d;
+}
+
+// The receiver's own lists, in flag-set order, with what the comparison
+// needs of each entry: names, each boss's area, each key item's kind, each
+// world pickup's area ("" when its play region has none).
+struct CoopLists {
+  std::vector<std::string> bossNames, bossAreas, keyItemNames, keyItemKinds, pickupAreas;
+  std::vector<uint32_t> bossFlags;
+};
+
+// Map section and world (Untended Graves has its own coordinates), as the
+// live page's mapKey: map number * 2, + 1 in Untended Graves.
+int CoopMapKey(uint32_t mapId, int32_t playRegionId) {
+  return static_cast<int>(mapId >> 24) * 2 + (playRegionId >= 400000 && playRegionId < 400100 ? 1 : 0);
+}
+
+// A stable id for a name (FNV-1a over its bytes), so that a list of names
+// gets a fingerprint the way a list of flag ids does.
+uint32_t CoopNameId(const std::string& name) {
+  uint32_t h = 2166136261u;
+  for (unsigned char c : name) h = (h ^ c) * 16777619u;
+  return h;
+}
+uint32_t CoopAreaListFingerprint(const std::vector<std::string>& areas) {
+  std::vector<uint32_t> ids;
+  for (const auto& a : areas) ids.push_back(CoopNameId(a));
+  return CoopFingerprint(ids);
+}
+
+// One field of a session log's flat JSON line (as SessionLog writes them):
+// a string's text (\" and \\ undone) or a number's digits; "" if absent.
+std::string CoopJsonField(const std::string& line, const char* key) {
+  const std::string k = std::string("\"") + key + "\":";
+  size_t p = line.find(k);
+  if (p == std::string::npos) return "";
+  p += k.size();
+  if (p < line.size() && line[p] == '"') {
+    std::string out;
+    for (++p; p < line.size() && line[p] != '"'; ++p) {
+      if (line[p] == '\\' && p + 1 < line.size()) ++p;
+      out += line[p];
+    }
+    return out;
+  }
+  size_t e = line.find_first_of(",}", p);
+  return line.substr(p, e == std::string::npos ? std::string::npos : e - p);
+}
+
+// One session log, read for the code: SummariseCoopSessions's input.
+struct CoopLogSession {
+  int64_t startMin = 0;  // Unix minutes, from startedAt (local time on this PC); 0 = unknown
+  double dur = 0;
+  uint64_t lost = 0, recovered = 0, gained = 0;
+  int levelStart = 0, levelEnd = 0;
+  std::vector<std::pair<double, std::string>> enters;
+  struct Death {
+    double t;
+    std::string area;
+    uint32_t boss;
+  };
+  std::vector<Death> deaths;
+  std::vector<std::pair<double, uint32_t>> kills;  // t, boss flag
+  struct Gear {
+    double t;
+    int hand;
+    int32_t id;
+    int upgrade;
+  };
+  std::vector<Gear> gear;
+  std::vector<CoopLevelPoint> points;
+};
+
+// "2026-10-06T15:51:10", local time, to Unix minutes; 0 if it doesn't read.
+int64_t CoopLocalStampToUnixMinutes(const std::string& stamp) {
+  std::tm tm{};
+  if (sscanf_s(stamp.c_str(), "%d-%d-%dT%d:%d:%d", &tm.tm_year, &tm.tm_mon, &tm.tm_mday, &tm.tm_hour, &tm.tm_min,
+                  &tm.tm_sec) != 6)
+    return 0;
+  tm.tm_year -= 1900;
+  tm.tm_mon -= 1;
+  tm.tm_isdst = -1;
+  time_t t = std::mktime(&tm);
+  return t > 0 ? static_cast<int64_t>(t) / 60 : 0;
+}
+
+CoopLogSession CoopParseLog(const std::string& text) {
+  CoopLogSession x;
+  double lastT = 0, endSeconds = -1;
+  bool haveStartLevel = false;
+  for (size_t pos = 0; pos < text.size();) {
+    size_t eol = text.find('\n', pos);
+    std::string line = text.substr(pos, eol == std::string::npos ? std::string::npos : eol - pos);
+    pos = eol == std::string::npos ? text.size() : eol + 1;
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+    if (line.size() < 2 || line.front() != '{' || line.back() != '}') continue;  // a line cut off mid-write
+    const std::string type = CoopJsonField(line, "type"), t = CoopJsonField(line, "t");
+    if (!t.empty()) lastT = std::strtod(t.c_str(), nullptr);
+    auto num = [&](const char* key) { return std::strtoll(CoopJsonField(line, key).c_str(), nullptr, 10); };
+    if (type == "start") {
+      x.startMin = CoopLocalStampToUnixMinutes(CoopJsonField(line, "startedAt"));
+      if (num("level") > 0) x.levelStart = x.levelEnd = static_cast<int>(num("level")), haveStartLevel = true;
+    } else if (type == "enter") {
+      x.enters.push_back({lastT, CoopJsonField(line, "area")});
+    } else if (type == "death") {
+      x.deaths.push_back({lastT, CoopJsonField(line, "area"), static_cast<uint32_t>(num("boss"))});
+      x.lost += static_cast<uint64_t>((std::max)(0LL, num("soulsLost")));
+    } else if (type == "bloodstain") {
+      x.recovered += static_cast<uint64_t>((std::max)(0LL, num("souls")));
+    } else if (type == "boss") {
+      x.kills.push_back({lastT, static_cast<uint32_t>(num("flag"))});
+    } else if (type == "gear") {
+      x.gear.push_back({lastT, CoopJsonField(line, "slot") == "L" ? 1 : 0, static_cast<int32_t>(num("id")),
+                        static_cast<int>(num("upgrade"))});
+    } else if (type == "sample" || type == "end") {
+      if (type == "end") {
+        endSeconds = std::strtod(CoopJsonField(line, "seconds").c_str(), nullptr);
+        x.gained = static_cast<uint64_t>((std::max)(0LL, num("gained")));
+      }
+      long long ms = num("playTimeMs"), level = num("level");
+      if (level > 0) {
+        if (!haveStartLevel) x.levelStart = static_cast<int>(level), haveStartLevel = true;
+        x.levelEnd = static_cast<int>(level);
+      }
+      if (ms > 0 && level > 0)
+        x.points.push_back({static_cast<uint32_t>(ms / 60000), static_cast<uint16_t>((std::min)(level, 1023LL))});
+    }
+  }
+  x.dur = endSeconds >= 0 ? endSeconds : lastT;
+  return x;
+}
+
+// The recorded part of a player's shared state, from their saved session
+// logs (each a whole .jsonl file), summed the way the results page sums
+// them: time per area from one `enter` to the next (the last one runs to
+// the session's end), deaths per area from `death` events, areas in the
+// order first visited. The level at each `sample` and `end` against the
+// game's play time, kept where it changes (and the last one), then thinned
+// evenly to kCoopMaxLevelPoints. Then the totals, the sessions (newest
+// first, at most kCoopMaxSessions), the bosses killed (`boss` events, with
+// the deaths near each before the kill: `death.boss`) and two records.
+// Areas not in `areaList` and bosses not in `bossFlags` are left out.
+void SummariseCoopSessions(const std::vector<std::string>& logs, const std::vector<std::string>& areaList,
+                           const std::vector<uint32_t>& bossFlags, SharedGameState* s) {
+  std::vector<CoopLogSession> all;
+  for (const std::string& text : logs) all.push_back(CoopParseLog(text));
+  std::stable_sort(all.begin(), all.end(),
+                   [](const CoopLogSession& a, const CoopLogSession& b) { return a.startMin < b.startMin; });
+  auto indexOf = [&](const std::string& area) {
+    for (size_t k = 0; k < areaList.size(); ++k)
+      if (areaList[k] == area) return static_cast<int>(k);
+    return -1;
+  };
+  std::vector<double> seconds(areaList.size(), 0.0);
+  std::vector<uint32_t> deaths(areaList.size(), 0);
+  std::vector<int> order;  // area indexes, first visited first
+  std::vector<CoopLevelPoint> points;
+  std::vector<double> offset;  // each session's start in recorded time
+  double recorded = 0;
+  for (const auto& x : all) {
+    offset.push_back(recorded);
+    recorded += x.dur;
+    for (size_t k = 0; k < x.enters.size(); ++k) {
+      double until = k + 1 < x.enters.size() ? x.enters[k + 1].first : x.dur;
+      int a = indexOf(x.enters[k].second);
+      if (a < 0) continue;
+      seconds[a] += (std::max)(0.0, until - x.enters[k].first);
+      if (std::find(order.begin(), order.end(), a) == order.end()) order.push_back(a);
+    }
+    for (const auto& d : x.deaths) {
+      int a = indexOf(d.area);
+      if (a < 0) continue;
+      ++deaths[a];
+      if (std::find(order.begin(), order.end(), a) == order.end()) order.push_back(a);
+    }
+    points.insert(points.end(), x.points.begin(), x.points.end());
+  }
+  s->areaListFingerprint = CoopAreaListFingerprint(areaList);
+  s->areas.clear();
+  for (int k : order) {
+    if (k >= static_cast<int>(kCoopMaxAreas)) continue;
+    uint32_t sec = static_cast<uint32_t>((std::min)(seconds[k] + 0.5, 16777215.0));
+    if (sec > 0 || deaths[k] > 0)
+      s->areas.push_back({static_cast<uint8_t>(k), sec, static_cast<uint16_t>((std::min)(deaths[k], 65535u))});
+  }
+  std::stable_sort(points.begin(), points.end(),
+                   [](const CoopLevelPoint& a, const CoopLevelPoint& b) { return a.minutes < b.minutes; });
+  std::vector<CoopLevelPoint> kept;
+  for (size_t k = 0; k < points.size(); ++k)
+    if (kept.empty() || points[k].level != kept.back().level || k + 1 == points.size()) kept.push_back(points[k]);
+  s->levels.clear();
+  if (kept.size() <= kCoopMaxLevelPoints) {
+    s->levels = kept;
+  } else {
+    for (size_t k = 0; k < kCoopMaxLevelPoints; ++k)
+      s->levels.push_back(kept[k * (kept.size() - 1) / (kCoopMaxLevelPoints - 1)]);
+  }
+
+  // Totals, over every session.
+  auto u32 = [](double v) { return static_cast<uint32_t>((std::min)((std::max)(v, 0.0), 4294967295.0)); };
+  uint64_t lost = 0, recovered = 0, gained = 0, deathCount = 0;
+  double longest = 0;
+  for (const auto& x : all) {
+    lost += x.lost, recovered += x.recovered, gained += x.gained, deathCount += x.deaths.size();
+    longest = (std::max)(longest, x.dur);
+  }
+  s->totals[0] = u32(recorded + 0.5), s->totals[1] = u32(static_cast<double>(deathCount));
+  s->totals[2] = u32(static_cast<double>(lost)), s->totals[3] = u32(static_cast<double>(recovered));
+  s->totals[4] = u32(static_cast<double>(gained)), s->totals[5] = u32(longest + 0.5);
+
+  // Sessions, newest first. idx(i) is session i's (oldest first) place in
+  // that list, or kCoopNone6 when it's older than the ones sent.
+  const size_t n = all.size(), sent = (std::min)(n, kCoopMaxSessions);
+  auto idx = [&](size_t i) { return n - 1 - i < sent ? static_cast<uint8_t>(n - 1 - i) : kCoopNone6; };
+  s->sessionAreaBits = static_cast<uint8_t>((std::min)(areaList.size(), size_t{63}));
+  s->sessionWeapons = false;
+  s->sessions.clear();
+  for (size_t back = 0; back < sent; ++back) {
+    const auto& x = all[n - 1 - back];
+    CoopSessionSummary y;
+    y.startMin = static_cast<uint32_t>((std::max)(x.startMin, int64_t{0}));
+    y.minutes = static_cast<uint16_t>((std::min)(x.dur / 60 + 0.5, 4095.0));
+    y.deaths = static_cast<uint16_t>((std::min)(x.deaths.size(), size_t{4095}));
+    y.gained = static_cast<uint32_t>((std::min)(x.gained, uint64_t{0xFFFFFF}));
+    y.levelStart = static_cast<uint16_t>((std::min)(x.levelStart, 1023));
+    y.levelEnd = static_cast<uint16_t>((std::min)(x.levelEnd, 1023));
+    for (const auto& e : x.enters) {
+      int a = indexOf(e.second);
+      if (a >= 0 && a < 63) y.areaBits |= uint64_t{1} << a;
+    }
+    y.kills = static_cast<uint8_t>((std::min)(x.kills.size(), size_t{63}));
+    // The weapon held longest in each hand.
+    for (int h = 0; h < 2; ++h) {
+      std::vector<CoopLogSession::Gear> ev;
+      for (const auto& g : x.gear)
+        if (g.hand == h) ev.push_back(g);
+      std::unordered_map<int32_t, double> held;
+      for (size_t k = 0; k < ev.size(); ++k)
+        held[ev[k].id] += (std::max)(0.0, (k + 1 < ev.size() ? ev[k + 1].t : x.dur) - ev[k].t);
+      int32_t best = 0;
+      double bestSec = -1;
+      for (const auto& [id, sec] : held)
+        if (sec > bestSec || (sec == bestSec && id < best)) best = id, bestSec = sec;
+      if (best > 0) {
+        y.weapon[h] = static_cast<uint32_t>(best / 100);
+        y.upgrade[h] = static_cast<uint8_t>((std::min)(best % 100, 31));
+        s->sessionWeapons = true;
+      }
+    }
+    s->sessions.push_back(y);
+  }
+
+  // Bosses killed: attempts (deaths near it) before the kill, on recorded time.
+  s->bossRecords.clear();
+  for (size_t i = 0; i < n; ++i) {
+    for (const auto& [kt, flag] : all[i].kills) {
+      auto it = std::find(bossFlags.begin(), bossFlags.end(), flag);
+      if (it == bossFlags.end() || it - bossFlags.begin() >= 63) continue;
+      const double killAt = offset[i] + kt;
+      uint16_t tries = 0;
+      double first = -1;
+      for (size_t j = 0; j < n; ++j)
+        for (const auto& d : all[j].deaths)
+          if (d.boss == flag && offset[j] + d.t <= killAt) {
+            ++tries;
+            if (first < 0 || offset[j] + d.t < first) first = offset[j] + d.t;
+          }
+      CoopBossRecord r;
+      r.boss = static_cast<uint8_t>(it - bossFlags.begin());
+      r.deaths = (std::min)(tries, uint16_t{1023});
+      r.ttkMin = first < 0 ? 0xFFFF : static_cast<uint16_t>((std::min)((killAt - first) / 60 + 0.5, 65534.0));
+      r.session = idx(i);
+      r.killMin = all[i].startMin ? static_cast<uint32_t>(all[i].startMin + static_cast<int64_t>(kt / 60)) : 0;
+      s->bossRecords.push_back(r);
+    }
+  }
+
+  // Records: the longest life (within a session) and the first death.
+  s->lifeSec = 0, s->lifeSession = s->lifeArea = kCoopNone6;
+  s->firstDeathAt = 0xFFFFFF, s->firstDeathSession = s->firstDeathArea = kCoopNone6;
+  for (size_t i = 0; i < n; ++i) {
+    const auto& x = all[i];
+    double from = 0;
+    std::string area = x.enters.empty() ? "" : x.enters.front().second;
+    std::vector<CoopLogSession::Death> ends = x.deaths;
+    ends.push_back({x.dur, "", 0});
+    for (const auto& d : ends) {
+      double len = d.t - from;
+      if (len > s->lifeSec) {
+        int a = indexOf(d.area.empty() ? area : d.area);
+        s->lifeSec = static_cast<uint32_t>((std::min)(len + 0.5, 16777215.0));
+        s->lifeSession = idx(i);
+        s->lifeArea = a >= 0 && a < 63 ? static_cast<uint8_t>(a) : kCoopNone6;
+      }
+      from = d.t;
+      if (!d.area.empty()) area = d.area;
+    }
+    if (s->firstDeathAt == 0xFFFFFF && !x.deaths.empty()) {
+      int a = indexOf(x.deaths.front().area);
+      s->firstDeathAt = static_cast<uint32_t>((std::min)(offset[i] + x.deaths.front().t + 0.5, 16777214.0));
+      s->firstDeathSession = idx(i);
+      s->firstDeathArea = a >= 0 && a < 63 ? static_cast<uint8_t>(a) : kCoopNone6;
+    }
+  }
+}
+
+// A code that fits one chat message (kCoopMaxCodeChars): if the whole state
+// doesn't, the weapons per session go first, then the oldest sessions, one
+// at a time. `leftOut` says what was dropped ("" if nothing). Records that
+// pointed at a dropped session point nowhere (kCoopNone6).
+std::string FitCoopCode(SharedGameState s, uint32_t sequence, std::string* leftOut) {
+  std::string code = CoopToText(EncodeCoopSnapshot(s, sequence));
+  bool droppedWeapons = false;
+  size_t droppedSessions = 0;
+  if (code.size() > kCoopMaxCodeChars && s.sessionWeapons) {
+    s.sessionWeapons = false;
+    droppedWeapons = true;
+    code = CoopToText(EncodeCoopSnapshot(s, sequence));
+  }
+  while (code.size() > kCoopMaxCodeChars && !s.sessions.empty()) {
+    s.sessions.pop_back();
+    ++droppedSessions;
+    code = CoopToText(EncodeCoopSnapshot(s, sequence));
+  }
+  if (leftOut) {
+    leftOut->clear();
+    if (droppedWeapons) *leftOut = "the weapons per session";
+    if (droppedSessions)
+      *leftOut += std::string(droppedWeapons ? " and " : "") + "the " + std::to_string(droppedSessions) + " oldest session" +
+                  (droppedSessions == 1 ? "" : "s");
+  }
+  return code;
+}
+
+// One player as the results page compares them.
+struct CoopPlayerView {
+  bool shown = false;
+  std::string name, area, region, bonfire;  // filled in by CoopPlaceView
+  bool elsewhere = false;                   // the partner is somewhere you haven't reached (no names)
+  std::string beyond;                       // at Category: the area it's a new area beyond (route.tsv)
+  int level = 0, ng = 0;
+  int hp[2] = {}, fp[2] = {}, stamina[2] = {}, attrs[9] = {};
+  int64_t souls = 0, deaths = 0, playSeconds = 0, ageSeconds = 0;
+  int bosses[2] = {}, keys[2] = {}, keysHeld = 0, items[2] = {};  // how many on, of the list's size
+  struct Area {
+    std::string name;
+    int64_t seconds = 0;
+    int deaths = 0;
+  };
+  std::vector<Area> areas;                    // recorded time and deaths per area
+  std::vector<std::pair<double, int>> levels;  // play time in hours, level
+};
+// A boss or key item, and which of you has it.
+struct CoopRow {
+  std::string name, group;  // both "" unless you have it yourself, or at Full
+  bool me = false, partner = false, meHeld = false, partnerHeld = false;
+};
+struct CoopAreaItems {
+  std::string area;  // kCoopOtherAreas for the areas you haven't reached (below Full)
+  int total = 0, me = 0, partner = 0, both = 0;
+};
+struct CoopCompare {
+  CoopPlayerView me, partner;
+  bool sameMap = false;
+  float dist = -1, dy = 0;
+  std::string clock;
+  bool bossesCompared = false, keysCompared = false, itemsCompared = false;
+  std::vector<CoopRow> bosses, keys;  // empty until your own lists are read
+  std::vector<CoopAreaItems> items;
+  std::vector<std::string> notes;     // lists that don't match yours
+  std::set<std::string> reached;      // the areas you've reached (CoopReachedAreas)
+};
+constexpr const char* kCoopOtherAreas = "Other areas";
+
+// The areas you've reached: where you are now, and every area with your
+// recorded time, an item you've found or a boss you've defeated.
+std::set<std::string> CoopReachedAreas(const SharedGameState& mine, bool haveMine, const CoopLists& lists,
+                                       const std::vector<std::string>& areaList, const std::string& myArea) {
+  std::set<std::string> reached;
+  if (!haveMine) return reached;
+  if (!myArea.empty()) reached.insert(myArea);
+  for (const auto& a : mine.areas)
+    if (a.index < areaList.size()) reached.insert(areaList[a.index]);
+  for (size_t k = 0; k < mine.pickupsFound.bits.size() && k < lists.pickupAreas.size(); ++k)
+    if (mine.pickupsFound.bits[k] && !lists.pickupAreas[k].empty()) reached.insert(lists.pickupAreas[k]);
+  for (size_t k = 0; k < mine.bossesDefeated.bits.size() && k < lists.bossAreas.size(); ++k)
+    if (mine.bossesDefeated.bits[k]) reached.insert(lists.bossAreas[k]);
+  return reached;
+}
+
+// Where a player is, by name, at the spoiler tier the way the live page
+// shows places (route hints): yours always; your partner's at Full, or in
+// an area you've reached (`reached`). Anywhere else, no names and
+// `elsewhere`; at Category also `beyond`, the area it opens from
+// (`fromArea`, if you've reached it; else "somewhere you've been"). A
+// region with no area (a PvP arena, an unknown id) counts as not reached.
+void CoopPlaceView(CoopPlayerView* v, const std::string& area, const std::string& region, const std::string& bonfire,
+                   const std::set<std::string>* reached, int tier = kTierOff, const std::string& fromArea = "") {
+  if (!v->shown) return;
+  v->beyond.clear();
+  if (reached && tier < kTierFull && (area.empty() || !reached->count(area))) {
+    v->area = v->region = v->bonfire = "";
+    v->elsewhere = !area.empty() || !region.empty();
+    if (v->elsewhere && tier == kTierCategory)
+      v->beyond = !fromArea.empty() && reached->count(fromArea) ? fromArea : "somewhere you've been";
+    return;
+  }
+  v->area = area, v->region = region, v->bonfire = bonfire;
+  v->elsewhere = false;
+}
+
+// Pure: both players side by side. Your partner's data follows the same
+// spoiler rules as the live page would for the same data, at the tier:
+// what you have is always named (bosses you've defeated, key items you
+// have, areas you've reached: CoopReachedAreas); the rest only at Full.
+// Below Full, those are unnamed rows (counted), and areas you haven't
+// reached are summed as "Other areas". You need your own lists (read from
+// the game) to compare anything. `myArea`: the area you're in now.
+CoopCompare BuildCoopCompare(const SharedGameState& mine, bool haveMine, const SharedGameState& partner,
+                             bool havePartner, const CoopLists& lists, const std::vector<std::string>& areaList,
+                             const std::string& myArea, uint32_t nowUtc, int tier = kTierOff) {
+  CoopCompare c;
+  const bool full = tier >= kTierFull;
+  const bool mineRead = haveMine && mine.bossesDefeated.fingerprint != 0;
+  c.reached = CoopReachedAreas(mine, haveMine, lists, areaList, myArea);
+  auto areaName = [&](const std::string& a) { return full || c.reached.count(a) ? a : std::string(kCoopOtherAreas); };
+  const uint32_t areaFingerprint = CoopAreaListFingerprint(areaList);
+
+  auto view = [&](const SharedGameState& s, bool isMine) {
+    CoopPlayerView v;
+    v.shown = true;
+    v.name = s.characterName;
+    v.level = s.level;
+    v.ng = s.clearCount;
+    v.hp[0] = s.hp, v.hp[1] = s.maxHp;
+    v.fp[0] = s.fp, v.fp[1] = s.maxFp;
+    v.stamina[0] = s.stamina, v.stamina[1] = s.maxStamina;
+    for (int k = 0; k < 9; ++k) v.attrs[k] = s.attrs[k];
+    v.souls = s.souls, v.deaths = s.deaths, v.playSeconds = s.playSeconds;
+    v.ageSeconds = isMine || nowUtc < s.capturedUtc ? 0 : static_cast<int64_t>(nowUtc - s.capturedUtc);
+    v.bosses[0] = s.bossesDefeated.CountOn(), v.bosses[1] = static_cast<int>(s.bossesDefeated.bits.size());
+    v.keys[0] = s.keyItemsObtained.CountOn(), v.keys[1] = static_cast<int>(s.keyItemsObtained.bits.size());
+    v.keysHeld = s.keyItemsHeld.CountOn();
+    v.items[0] = s.pickupsFound.CountOn(), v.items[1] = static_cast<int>(s.pickupsFound.bits.size());
+    if (isMine || s.areaListFingerprint == areaFingerprint) {
+      for (const auto& a : s.areas) {
+        if (a.index >= areaList.size()) continue;
+        std::string name = isMine ? areaList[a.index] : areaName(areaList[a.index]);
+        auto it = std::find_if(v.areas.begin(), v.areas.end(), [&](const auto& x) { return x.name == name; });
+        if (it == v.areas.end()) v.areas.push_back({name, a.seconds, a.deaths});
+        else it->seconds += a.seconds, it->deaths += a.deaths;
+      }
+    }
+    for (const auto& p : s.levels) v.levels.push_back({p.minutes / 60.0, p.level});
+    return v;
+  };
+  if (haveMine) c.me = view(mine, true);
+  if (!havePartner) return c;
+  c.partner = view(partner, false);
+  if (!partner.areas.empty() && partner.areaListFingerprint != areaFingerprint)
+    c.notes.push_back("Area lists differ: their time and deaths per area aren't shown");
+
+  if (haveMine) {
+    c.sameMap = partner.mapId != 0 &&
+                CoopMapKey(mine.mapId, mine.playRegionId) == CoopMapKey(partner.mapId, partner.playRegionId);
+    if (c.sameMap && mine.havePose && partner.havePose) {
+      float dx = partner.x - mine.x, dy = partner.y - mine.y, dz = partner.z - mine.z;
+      c.dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+      c.dy = dy;
+      PlayerPose me;
+      me.ok = true;
+      me.x = mine.x, me.y = mine.y, me.z = mine.z, me.facingRadians = mine.facing;
+      c.clock = ClockDirection(me, dx, dz);
+    }
+  }
+  if (!mineRead) return c;  // nothing to compare against yet
+
+  CoopFlagDiff bosses = CompareCoopFlags(mine.bossesDefeated, partner.bossesDefeated);
+  c.bossesCompared = bosses.comparable;
+  for (size_t k = 0; k < mine.bossesDefeated.bits.size() && k < lists.bossNames.size(); ++k) {
+    CoopRow r;
+    r.me = mine.bossesDefeated.bits[k];
+    r.partner = bosses.comparable && partner.bossesDefeated.bits[k];
+    if (r.me || full) r.name = lists.bossNames[k], r.group = k < lists.bossAreas.size() ? lists.bossAreas[k] : "";
+    c.bosses.push_back(r);
+  }
+  if (!bosses.comparable) c.notes.push_back("Boss lists differ");
+
+  CoopFlagDiff keys = CompareCoopFlags(mine.keyItemsObtained, partner.keyItemsObtained);
+  const bool heldComparable = CompareCoopFlags(mine.keyItemsHeld, partner.keyItemsHeld).comparable;
+  c.keysCompared = keys.comparable;
+  for (size_t k = 0; k < mine.keyItemsObtained.bits.size() && k < lists.keyItemNames.size(); ++k) {
+    CoopRow r;
+    r.me = mine.keyItemsObtained.bits[k];
+    r.meHeld = k < mine.keyItemsHeld.bits.size() && mine.keyItemsHeld.bits[k];
+    r.partner = keys.comparable && partner.keyItemsObtained.bits[k];
+    r.partnerHeld = heldComparable && partner.keyItemsHeld.bits[k];
+    if (r.me || full) r.name = lists.keyItemNames[k], r.group = k < lists.keyItemKinds.size() ? lists.keyItemKinds[k] : "";
+    c.keys.push_back(r);
+  }
+  if (!keys.comparable) c.notes.push_back("Key item lists differ");
+
+  CoopFlagDiff items = CompareCoopFlags(mine.pickupsFound, partner.pickupsFound);
+  c.itemsCompared = items.comparable;
+  CoopAreaItems other;
+  other.area = kCoopOtherAreas;
+  for (size_t k = 0; k < mine.pickupsFound.bits.size() && k < lists.pickupAreas.size(); ++k) {
+    if (lists.pickupAreas[k].empty()) continue;
+    std::string name = areaName(lists.pickupAreas[k]);
+    CoopAreaItems* row = &other;
+    if (name != kCoopOtherAreas) {
+      auto it = std::find_if(c.items.begin(), c.items.end(), [&](const auto& x) { return x.area == name; });
+      if (it == c.items.end()) {
+        c.items.push_back({name});
+        row = &c.items.back();
+      } else {
+        row = &*it;
+      }
+    }
+    bool me = mine.pickupsFound.bits[k], them = items.comparable && partner.pickupsFound.bits[k];
+    ++row->total;
+    row->me += me;
+    row->partner += them;
+    row->both += me && them;
+  }
+  if (other.total) c.items.push_back(other);
+  if (!items.comparable) c.notes.push_back("Item lists differ (a different journey, game version or map data)");
+  if (!c.notes.empty()) c.notes.push_back("both of you need the same WASD version, game version and NG cycle");
+  return c;
+}
+
+// ---- the pair report's data (results page: Report for Together / Partner)
+
+// Two sessions are played together when their times overlap: each such
+// pair, with the overlap. Sessions are newest first, as in a code;
+// sessions with no start time are left out. Touching isn't overlapping.
+struct CoopTogether {
+  size_t me = 0, partner = 0;  // indexes into each player's sessions
+  uint32_t startMin = 0;       // when the overlap starts (Unix minutes)
+  uint32_t minutes = 0;
+};
+std::vector<CoopTogether> CoopSessionsTogether(const std::vector<CoopSessionSummary>& mine,
+                                               const std::vector<CoopSessionSummary>& partner) {
+  std::vector<CoopTogether> out;
+  for (size_t i = 0; i < mine.size(); ++i) {
+    if (!mine[i].startMin) continue;
+    const uint32_t a0 = mine[i].startMin, a1 = a0 + mine[i].minutes;
+    for (size_t j = 0; j < partner.size(); ++j) {
+      if (!partner[j].startMin) continue;
+      const uint32_t b0 = partner[j].startMin, b1 = b0 + partner[j].minutes;
+      const uint32_t from = (std::max)(a0, b0), to = (std::min)(a1, b1);
+      if (to > from) out.push_back({i, j, from, to - from});
+    }
+  }
+  std::sort(out.begin(), out.end(), [](const CoopTogether& x, const CoopTogether& y) { return x.startMin > y.startMin; });
+  return out;
+}
+
+// One player's recorded play, as the pair report shows it, names already
+// at the spoiler tier the way the live page would show them: the partner's
+// areas, bosses and weapons are named at Full, and below it only where
+// you've reached them yourself (an area in `reached`, a boss you've
+// defeated, a weapon you've held in a recorded session); the rest arrive
+// unnamed ("" or kCoopOtherAreas).
+struct CoopPairPlayer {
+  bool shown = false;
+  uint32_t totals[6] = {};
+  struct Weapon {
+    std::string name;  // "" = not named (a weapon you haven't found)
+    int upgrade = 0;
+    bool any = false;  // a weapon was recorded at all
+  };
+  struct Session {
+    uint32_t startMin = 0, minutes = 0, deaths = 0, gained = 0, levelStart = 0, levelEnd = 0, kills = 0;
+    std::vector<std::string> areas;  // kCoopOtherAreas once for any you haven't reached
+    Weapon weapons[2];
+  };
+  std::vector<Session> sessions;  // newest first
+  struct Boss {
+    std::string name, area;  // "" when not named
+    uint32_t deaths = 0;
+    int ttkMin = -1;   // -1: no attempts before the kill
+    int session = -1;  // index into sessions, -1: not among them
+    uint32_t killMin = 0;
+  };
+  std::vector<Boss> bosses;
+  struct Mark {
+    bool have = false;
+    uint32_t seconds = 0;
+    int session = -1;
+    std::string area;
+  };
+  Mark life, firstDeath;  // firstDeath.seconds: into the recorded time
+};
+struct CoopPair {
+  CoopPairPlayer me, partner;
+  std::vector<CoopTogether> together;
+  uint32_t togetherMinutes = 0;
+};
+
+// Pure. `weaponName(id)` names a weapon param id with its upgrade digits
+// zeroed ("" if unknown).
+CoopPair BuildCoopPair(const SharedGameState& mine, bool haveMine, const SharedGameState& partner, bool havePartner,
+                       const CoopLists& lists, const std::vector<std::string>& areaList,
+                       const std::set<std::string>& reached,
+                       const std::function<std::string(int32_t)>& weaponName, int tier = kTierOff) {
+  CoopPair c;
+  const bool full = tier >= kTierFull;
+  const uint32_t areaFingerprint = CoopAreaListFingerprint(areaList);
+  // Weapons you've held in a recorded session, without their infusion and
+  // upgrade (a Heavy Long Sword +3 is a Long Sword you've found).
+  std::set<uint32_t> myWeapons;
+  if (haveMine && mine.sessionWeapons)
+    for (const auto& x : mine.sessions)
+      for (uint32_t w : x.weapon)
+        if (w) myWeapons.insert(w - w % 100);
+  auto view = [&](const SharedGameState& s, bool isMine) {
+    CoopPairPlayer v;
+    v.shown = true;
+    std::copy(s.totals, s.totals + 6, v.totals);
+    const bool areasOk = isMine || s.areaListFingerprint == areaFingerprint;
+    auto areaName = [&](int index) -> std::string {
+      if (index < 0 || index >= 63 || !areasOk || index >= static_cast<int>(areaList.size())) return "";
+      const std::string& a = areaList[index];
+      return isMine || full || reached.count(a) ? a : std::string(kCoopOtherAreas);
+    };
+    for (const auto& x : s.sessions) {
+      CoopPairPlayer::Session y;
+      y.startMin = x.startMin, y.minutes = x.minutes, y.deaths = x.deaths, y.gained = x.gained;
+      y.levelStart = x.levelStart, y.levelEnd = x.levelEnd, y.kills = x.kills;
+      bool other = false;
+      for (int b = 0; b < s.sessionAreaBits && b < 63; ++b) {
+        if (!((x.areaBits >> b) & 1u)) continue;
+        std::string a = areaName(b);
+        if (a.empty()) continue;
+        if (a == kCoopOtherAreas) other = true;
+        else y.areas.push_back(a);
+      }
+      if (other) y.areas.push_back(kCoopOtherAreas);
+      if (s.sessionWeapons) {
+        for (int h = 0; h < 2; ++h) {
+          if (!x.weapon[h]) continue;
+          y.weapons[h].any = true;
+          y.weapons[h].upgrade = x.upgrade[h];
+          if (isMine || full || myWeapons.count(x.weapon[h] - x.weapon[h] % 100)) {
+            std::string n = weaponName(static_cast<int32_t>(x.weapon[h]) * 100);
+            y.weapons[h].name = n.empty() ? "Weapon " + std::to_string(x.weapon[h] * 100) : n;
+          }
+        }
+      }
+      v.sessions.push_back(y);
+    }
+    for (const auto& r : s.bossRecords) {
+      CoopPairPlayer::Boss b;
+      // Named from your boss list only if theirs is the same one.
+      const bool sameList = isMine || s.bossesDefeated.fingerprint == CoopFingerprint(lists.bossFlags);
+      const bool yours = haveMine && r.boss < mine.bossesDefeated.bits.size() && mine.bossesDefeated.bits[r.boss] &&
+                         mine.bossesDefeated.fingerprint == s.bossesDefeated.fingerprint;
+      if ((isMine || yours || (full && sameList)) && r.boss < lists.bossNames.size()) {
+        b.name = lists.bossNames[r.boss];
+        b.area = r.boss < lists.bossAreas.size() ? lists.bossAreas[r.boss] : "";
+      }
+      b.deaths = r.deaths;
+      b.ttkMin = r.ttkMin == 0xFFFF ? -1 : r.ttkMin;
+      b.session = r.session < v.sessions.size() ? r.session : -1;
+      b.killMin = r.killMin;
+      v.bosses.push_back(b);
+    }
+    auto mark = [&](uint32_t sec, uint8_t session, uint8_t area, bool have) {
+      CoopPairPlayer::Mark m;
+      m.have = have;
+      m.seconds = sec;
+      m.session = session < v.sessions.size() ? session : -1;
+      m.area = area == kCoopNone6 ? "" : areaName(area);
+      return m;
+    };
+    v.life = mark(s.lifeSec, s.lifeSession, s.lifeArea, s.lifeSec > 0);
+    v.firstDeath = mark(s.firstDeathAt, s.firstDeathSession, s.firstDeathArea, s.firstDeathAt != 0xFFFFFF);
+    return v;
+  };
+  if (haveMine) c.me = view(mine, true);
+  if (havePartner) c.partner = view(partner, false);
+  if (haveMine && havePartner) {
+    c.together = CoopSessionsTogether(mine.sessions, partner.sessions);
+    for (const auto& t : c.together) c.togetherMinutes += t.minutes;
+  }
+  return c;
+}
+
 struct LiveNearby {
   std::string label;     // unfound: at the spoiler tier ("" at Off and Vague: counts only); found: the name
   std::string category;  // unfound at Full: the item's kind, shown beside its name
@@ -6153,6 +7618,7 @@ struct LiveNearby {
   bool showHeight = false;
 };
 struct LiveBoss {
+  uint32_t flag = 0;  // its defeat flag (bosses.tsv)
   std::string name;  // "" when hidden by the tier
   bool defeated = false, optional = false, nearest = false, humanType = false;
   bool later = false;  // its route step isn't open yet (BossIsLater)
@@ -6219,7 +7685,19 @@ void LiveNearbyList(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleSize, ui
                     const PlayerPose& pose, const PlayerArea& where, const std::string& area,
                     std::vector<LiveNearby>* out);
 void LiveBossList(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleSize, const std::string& area,
-                  const PlayerPose& pose, std::vector<LiveBoss>* out, int counts[4]);
+                  const PlayerPose& pose, std::vector<LiveBoss>* out, int counts[4],
+                  std::vector<SessionBoss>* all = nullptr);
+
+// The undefeated boss you're within `range` metres of (the nearest, from
+// this area's list), as its flag; 0 if none. Bosses that aren't open yet
+// in the route don't count.
+uint32_t BossInReach(const std::vector<LiveBoss>& bosses, float range) {
+  uint32_t flag = 0;
+  float best = range;
+  for (const auto& b : bosses)
+    if (!b.defeated && !b.later && b.dist >= 0 && b.dist <= best) best = b.dist, flag = b.flag;
+  return flag;
+}
 void LiveRoute(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleSize, uintptr_t baseACellOffset,
                const std::string& character, const std::string& area, std::vector<LiveRouteStep>* steps,
                std::string* hint, int* hidden);
@@ -6274,6 +7752,28 @@ struct WindowSnapshot {
   int mapNumber = 0;
   bool untendedWorld = false;
 };
+
+// Co-op state shared between the poll loop and the live page's server:
+// this player's state (refreshed by the loop) and the partner's latest
+// snapshot (pasted on the page). Never merged into the reader's own state.
+struct CoopShared {
+  std::mutex lock;
+  SharedGameState mine;
+  bool mineReady = false;  // flag sets read at least once
+  CoopLists lists;         // the lists of mine's flag sets
+  SharedGameState partner;
+  bool havePartner = false;
+  uint32_t sequence = 0;
+  // The recorded part (areas, levels), summed from the saved sessions:
+  // for this character, at this tick (redone every 30s at most).
+  std::string recordedFor;
+  ULONGLONG recordedAt = 0;
+};
+CoopShared g_coop;
+
+void ReadMyCoopFlags(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleSize, const ResolvedProfile& profile,
+                     SharedGameState* s, CoopLists* lists);
+bool LivePageRecentlyPolled();
 
 struct WindowShared {
   CRITICAL_SECTION lock;
@@ -6475,6 +7975,8 @@ void PollGameRun(HANDLE hProcess, DWORD pid) {
   int32_t lastLevel = INT32_MIN;
   int32_t lastHandIdx[3] = {INT32_MIN, INT32_MIN, INT32_MIN};  // right, left, quick item
   int32_t lastSpellIdx = INT32_MIN;
+  std::vector<SessionBoss> sessionBosses;  // every boss's defeat flag, from LiveBossList (for the session log)
+  SessionWeapon handWeapons[2];            // the weapon in each hand (for the session log)
   bool inGame = false;
   ULONGLONG lastResolveAttempt = 0;
   auto resolveAll = [&]() -> bool {
@@ -6646,6 +8148,13 @@ void PollGameRun(HANDLE hProcess, DWORD pid) {
       ctx.pose = snap.pose;
       ctx.lastBonfireId = area.lastBonfireId;
       ctx.lastBonfireName = snap.lastBonfireName;
+      // Bosses and hands as of the last tick's reads (further down the loop).
+      ctx.bosses = sessionBosses;
+      ctx.bossInReach = BossInReach(snap.bosses, kBossFightRange);
+      for (const auto& b : sessionBosses)
+        if (b.flag == ctx.bossInReach) ctx.bossInReachName = b.name;
+      ctx.hands[0] = handWeapons[0];
+      ctx.hands[1] = handWeapons[1];
       snap.characterName = ctx.characterName;
       if (counters.ok && tracker.Tick(dt, ctx)) {
         Log("%s", session.lastEvent.c_str());
@@ -6672,6 +8181,29 @@ void PollGameRun(HANDLE hProcess, DWORD pid) {
           TrailAdd({pt.x, pt.y, pt.z, pt.mapKey, 2});
         if (area.ok) lastTrailBonfire = area.lastBonfireId;
       }
+      // Co-op: this player's shared state. The realtime part every tick;
+      // the flag sets further down, every 5s while the page is open.
+      {
+        std::lock_guard<std::mutex> guard(g_coop.lock);
+        SharedGameState& m = g_coop.mine;
+        m.capturedUtc = static_cast<uint32_t>(std::time(nullptr));
+        m.characterName = snap.characterName;
+        m.level = CoopClampU16(snap.level);
+        m.hp = CoopClampU16(snap.hp), m.maxHp = CoopClampU16(snap.maxHp);
+        m.fp = CoopClampU16(snap.fp), m.maxFp = CoopClampU16(snap.maxFp);
+        m.stamina = CoopClampU16(snap.stamina), m.maxStamina = CoopClampU16(snap.maxStamina);
+        for (int k = 0; k < 9; ++k) m.attrs[k] = static_cast<uint8_t>((std::min)((std::max)(snap.attrs[k], 0), 255));
+        m.souls = static_cast<uint32_t>((std::max)(snap.souls, 0));
+        m.deaths = static_cast<uint32_t>((std::max)(counters.deathNum, 0));
+        m.playSeconds = counters.playTime / 1000;
+        if (area.ok) {
+          m.mapId = area.mapId;
+          m.lastBonfireId = area.lastBonfireId;
+        }
+        m.playRegionId = areaTracker.lastRegion;
+        m.havePose = snap.pose.ok;
+        m.x = snap.pose.x, m.y = snap.pose.y, m.z = snap.pose.z, m.facing = snap.pose.facingRadians;
+      }
     }
     snap.nextLevelCost = RequiredSoulsForLevel(snap.level + 1);
     snap.haveValues = true;
@@ -6691,13 +8223,26 @@ void PollGameRun(HANDLE hProcess, DWORD pid) {
     int32_t leftIdx = readI32(profile.xBase + kLeftHandSlotOffset);
     int32_t quickIdx = readI32(profile.xBase + kSelectedQuickItemSlotOffset);
     int32_t spellIdx = ReadActiveSpellIndex(hProcess, profile.xBase);
+    // The weapon in a hand, for the session log: its param id (upgrade in
+    // the last two digits) and name.
+    auto handWeapon = [&](int32_t inventoryId) {
+      SessionWeapon w;
+      ItemLookup item = inventoryId >= 0 ? ResolveItem(hProcess, equipInventoryData, inventoryId) : ItemLookup{};
+      if (!item.ok || !item.plausible) return w;
+      w.id = item.giveId;
+      w.name = itemName(inventoryId);
+      w.upgrade = item.giveId % 100;
+      return w;
+    };
     if (gearChanged || rightIdx != lastHandIdx[0]) {
       std::string slot = "R" + std::to_string(rightIdx + 1);
       snap.rightHand = (rightIdx >= 0 && rightIdx <= 2) ? itemName(slotItemId(slot.c_str())) : "?";
+      handWeapons[0] = (rightIdx >= 0 && rightIdx <= 2) ? handWeapon(slotItemId(slot.c_str())) : SessionWeapon();
     }
     if (gearChanged || leftIdx != lastHandIdx[1]) {
       std::string slot = "L" + std::to_string(leftIdx + 1);
       snap.leftHand = (leftIdx >= 0 && leftIdx <= 2) ? itemName(slotItemId(slot.c_str())) : "?";
+      handWeapons[1] = (leftIdx >= 0 && leftIdx <= 2) ? handWeapon(slotItemId(slot.c_str())) : SessionWeapon();
     }
     if (gearChanged || quickIdx != lastHandIdx[2]) {
       int32_t id = (quickIdx >= 0 && quickIdx <= 9)
@@ -6833,7 +8378,8 @@ void PollGameRun(HANDLE hProcess, DWORD pid) {
         LiveNearbyList(hProcess, moduleBase, moduleSize, profile.baseACellOffset, snap.pose, where,
                        snap.currentArea, &snap.nearby);
       }
-      LiveBossList(hProcess, moduleBase, moduleSize, snap.currentArea, snap.pose, &snap.bosses, snap.bossCounts);
+      LiveBossList(hProcess, moduleBase, moduleSize, snap.currentArea, snap.pose, &snap.bosses, snap.bossCounts,
+                   &sessionBosses);
       LiveRoute(hProcess, moduleBase, moduleSize, profile.baseACellOffset, snap.characterName, snap.currentArea,
                 &snap.route, &snap.routeHint, &snap.routeHidden);
       LiveMissables(hProcess, moduleBase, moduleSize, profile.baseACellOffset, snap.characterName, snap.currentArea,
@@ -6853,6 +8399,20 @@ void PollGameRun(HANDLE hProcess, DWORD pid) {
         std::string slot = "R" + std::to_string(rIdx + 1);
         int32_t invId = (rIdx >= 0 && rIdx <= 2) ? slotItemId(slot.c_str()) : -1;
         snap.upgrade = invId >= 0 ? WindowUpgrade(hProcess, moduleBase, profile, invId) : "";
+        // Co-op flag sets (~1,000 pickup flags), only while the page is open.
+        if (LivePageRecentlyPolled()) {
+          SharedGameState flags;
+          CoopLists lists;
+          ReadMyCoopFlags(hProcess, moduleBase, moduleSize, profile, &flags, &lists);
+          std::lock_guard<std::mutex> guard(g_coop.lock);
+          g_coop.mine.bossesDefeated = flags.bossesDefeated;
+          g_coop.mine.keyItemsObtained = flags.keyItemsObtained;
+          g_coop.mine.keyItemsHeld = flags.keyItemsHeld;
+          g_coop.mine.pickupsFound = flags.pickupsFound;
+          g_coop.mine.clearCount = flags.clearCount;
+          g_coop.lists = std::move(lists);
+          g_coop.mineReady = true;
+        }
       }
     }
     // Perf figures: refreshed once a second over a rolling 5s window.
@@ -8167,6 +9727,8 @@ LRESULT CALLBACK MainWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lPara
       int id = LOWORD(wParam), code = HIWORD(wParam);
       if (id == kIdOpenPage && g_liveUrl[0]) ShellExecuteW(nullptr, L"open", g_liveUrl, nullptr, nullptr, SW_SHOWNORMAL);
       else if (id == kIdReadMapData) OnReadMapData(hwnd);
+      else if (id == kIdResults && g_liveUrl[0])  // served, so its co-op card works
+        ShellExecuteW(nullptr, L"open", (std::wstring(g_liveUrl) + L"results").c_str(), nullptr, nullptr, SW_SHOWNORMAL);
       else if (id == kIdResults) RunReport(true);
       else if (id == kIdDataFolder) {
         EnsureDir(Paths().user);
@@ -8371,14 +9933,52 @@ std::string BuildReportHtml(std::string tmpl, std::string sessionsJson) {
   return tmpl;
 }
 
-int RunReport(bool openInBrowser) {
-  const std::wstring templatePath = Paths().Template(L"results_template.html");
-  std::string tmpl = ReadWholeFile(templatePath);
-  if (BuildReportHtml(tmpl, "[]").empty()) {
-    Log("Template missing or has no __SESSIONS_JSON__ token: %ls", templatePath.c_str());
-    return 4;
+// A fingerprint of the saved sessions: every session and perf file's name,
+// size and last write time, hashed (FNV-1a). It changes whenever a session
+// is recorded to, so the results page can tell when to fetch them again
+// without WASD reading them. GetFileAttributesExW, not the directory
+// listing's figures, which NTFS updates late for a file still open.
+std::string SessionsStamp() {
+  uint64_t h = 1469598103934665603ULL;
+  auto mix = [&](const void* p, size_t n) {
+    for (size_t i = 0; i < n; ++i) h = (h ^ static_cast<const unsigned char*>(p)[i]) * 1099511628211ULL;
+  };
+  WIN32_FIND_DATAW player;
+  HANDLE players = FindFirstFileW((Paths().Sessions() + L"\\*").c_str(), &player);
+  if (players != INVALID_HANDLE_VALUE) {
+    do {
+      if (!(player.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || player.cFileName[0] == L'.') continue;
+      std::wstring dir = Paths().Sessions() + L"\\" + player.cFileName;
+      WIN32_FIND_DATAW file;
+      HANDLE files = FindFirstFileW((dir + L"\\*.*").c_str(), &file);
+      if (files == INVALID_HANDLE_VALUE) continue;
+      do {
+        std::wstring name = file.cFileName;
+        auto ends = [&](const wchar_t* tail) {
+          size_t n = std::wcslen(tail);
+          return name.size() >= n && name.compare(name.size() - n, n, tail) == 0;
+        };
+        if (!ends(L".jsonl") && !ends(L".perf.csv")) continue;
+        std::wstring path = dir + L"\\" + name;
+        WIN32_FILE_ATTRIBUTE_DATA a = {};
+        if (!GetFileAttributesExW(path.c_str(), GetFileExInfoStandard, &a)) continue;
+        mix(path.data(), path.size() * sizeof(wchar_t));
+        mix(&a.nFileSizeLow, sizeof a.nFileSizeLow);
+        mix(&a.nFileSizeHigh, sizeof a.nFileSizeHigh);
+        mix(&a.ftLastWriteTime, sizeof a.ftLastWriteTime);
+      } while (FindNextFileW(files, &file));
+      FindClose(files);
+    } while (FindNextFileW(players, &player));
+    FindClose(players);
   }
+  char buf[17];
+  std::snprintf(buf, sizeof buf, "%016llx", static_cast<unsigned long long>(h));
+  return buf;
+}
 
+// Every saved session as the results page's JSON array: {"file", "events",
+// "perf"?} per session file.
+std::string SessionsJson(int* sessionsOut, int* eventsOut) {
   std::string json = "[";
   int sessionCount = 0, eventCount = 0;
   WIN32_FIND_DATAW player;
@@ -8425,7 +10025,29 @@ int RunReport(bool openInBrowser) {
     FindClose(players);
   }
   json += "]";
-  tmpl = BuildReportHtml(tmpl, json);
+  if (sessionsOut) *sessionsOut = sessionCount;
+  if (eventsOut) *eventsOut = eventCount;
+  return json;
+}
+
+// The results page with every saved session in it, or "" (logged) when the
+// template is missing. `report` writes it to a file; the live server also
+// serves it at /results, where its co-op card can reach /api/coop and it
+// keeps itself current from /api/sessions.
+std::string ResultsPageHtml(int* sessionsOut, int* eventsOut) {
+  const std::wstring templatePath = Paths().Template(L"results_template.html");
+  std::string tmpl = ReadWholeFile(templatePath);
+  if (BuildReportHtml(tmpl, "[]").empty()) {
+    Log("Template missing or has no __SESSIONS_JSON__ token: %ls", templatePath.c_str());
+    return "";
+  }
+  return BuildReportHtml(tmpl, SessionsJson(sessionsOut, eventsOut));
+}
+
+int RunReport(bool openInBrowser) {
+  int sessionCount = 0, eventCount = 0;
+  std::string tmpl = ResultsPageHtml(&sessionCount, &eventCount);
+  if (tmpl.empty()) return 4;
   std::wstring outDir = Paths().Reports();
   EnsureDir(outDir);
   std::wstring outPath = outDir + L"\\results.html";
@@ -9441,6 +11063,52 @@ std::string WindowKeyItems(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleS
   for (const auto& st : states) { obtained += st.obtained; held += st.held; }
   return std::to_string(obtained) + " / " + std::to_string(states.size()) + " key items (" +
          std::to_string(held) + " held)";
+}
+
+// This player's co-op flag sets, over the same lists the rest of the tool
+// uses: bosses.tsv (defeat flags), key_items.tsv (one entry per name, as
+// `keys`), every world pickup of this journey (pickup flags), and the NG
+// cycle. `lists` gets the names, kinds and areas the comparison needs, in
+// the same order.
+void ReadMyCoopFlags(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleSize, const ResolvedProfile& profile,
+                     SharedGameState* s, CoopLists* lists) {
+  static EventFlagRoots roots;
+  if (!roots.eventFlagManCell) roots = ResolveEventFlagRoots(hProcess, moduleBase, moduleSize);
+  *lists = CoopLists();
+  std::vector<uint32_t> ids;
+  s->bossesDefeated.bits.clear();
+  for (const auto& b : Bosses()) {
+    ids.push_back(b.flag);
+    lists->bossNames.push_back(b.name);
+    lists->bossAreas.push_back(b.area);
+    lists->bossFlags.push_back(b.flag);
+    s->bossesDefeated.bits.push_back(ReadEventFlag(hProcess, moduleBase, roots, b.flag) > 0);
+  }
+  s->bossesDefeated.fingerprint = CoopFingerprint(ids);
+
+  const int clearCount = ReadClearCount(hProcess, moduleBase, profile.baseACellOffset);
+  s->clearCount = static_cast<uint8_t>((std::min)((std::max)(clearCount, 0), 255));
+  ids.clear();
+  s->keyItemsObtained.bits.clear();
+  s->keyItemsHeld.bits.clear();
+  for (const auto& st : KeyItemStates(hProcess, moduleBase, roots, profile, clearCount, KeyItems())) {
+    ids.push_back(static_cast<uint32_t>(st.item->goodsId));
+    lists->keyItemNames.push_back(st.item->name);
+    lists->keyItemKinds.push_back(st.item->kind);
+    s->keyItemsObtained.bits.push_back(st.obtained);
+    s->keyItemsHeld.bits.push_back(st.held);
+  }
+  s->keyItemsObtained.fingerprint = s->keyItemsHeld.fingerprint = CoopFingerprint(ids);
+
+  ids.clear();
+  s->pickupsFound.bits.clear();
+  static const AreaInfo areas;
+  for (const auto& g : AllWorldPickups(hProcess, moduleBase, clearCount)) {
+    ids.push_back(g.flagId);
+    lists->pickupAreas.push_back(areas.AreaOf(PickupRegion(g)));
+    s->pickupsFound.bits.push_back(ReadEventFlag(hProcess, moduleBase, roots, g.flagId) > 0);
+  }
+  s->pickupsFound.fingerprint = CoopFingerprint(ids);
 }
 
 int RunKeys() {
@@ -10870,8 +12538,10 @@ void LiveNearbyList(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleSize, ui
 // at Full, for every boss (user's call, 2026-10-07); undefeated bosses are
 // unnamed below Full.
 void LiveBossList(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleSize, const std::string& area,
-                  const PlayerPose& pose, std::vector<LiveBoss>* out, int counts[4]) {
+                  const PlayerPose& pose, std::vector<LiveBoss>* out, int counts[4],
+                  std::vector<SessionBoss>* all) {
   const std::vector<BossInfo>& bosses = Bosses();
+  if (all) all->clear();
   static EventFlagRoots roots;
   if (!roots.eventFlagManCell) roots = ResolveEventFlagRoots(hProcess, moduleBase, moduleSize);
   const int tier = SpoilerTier();
@@ -10884,8 +12554,10 @@ void LiveBossList(HANDLE hProcess, uintptr_t moduleBase, SIZE_T moduleSize, cons
     bool dlc = b.note.find("DLC") != std::string::npos;
     counts[dlc ? 2 : 0] += dead ? 1 : 0;
     counts[dlc ? 3 : 1] += 1;
+    if (all) all->push_back({b.flag, b.name, b.area, dead});
     if (area.empty() || b.area != area) continue;
     LiveBoss lb;
+    lb.flag = b.flag;
     lb.defeated = dead;
     lb.optional = b.status == "optional";
     // Not open yet in the normal route: shown apart, never the boss ahead.
@@ -11094,6 +12766,163 @@ std::string BuildLiveJson(const WindowSnapshot& s, size_t trailFrom) {
   return j + "}";
 }
 
+// The results page's co-op data (GET /api/coop): both players side by
+// side, from BuildCoopCompare (already at the spoiler tier), plus the tier
+// itself for the page's Spoilers control.
+std::string CoopCompareJson(const CoopCompare& c, bool mineReady, bool loaded, const std::string& loadedName,
+                            int tier) {
+  auto b = [](bool v) { return std::string(v ? "true" : "false"); };
+  auto i = [](long long v) { return std::to_string(v); };
+  auto pair = [&](const int v[2]) { return "[" + i(v[0]) + "," + i(v[1]) + "]"; };
+  auto player = [&](const CoopPlayerView& p) -> std::string {
+    if (!p.shown) return "null";
+    std::string attrs = "[";
+    for (int k = 0; k < 9; ++k) attrs += (k ? "," : "") + i(p.attrs[k]);
+    std::string areas = "[";
+    for (size_t k = 0; k < p.areas.size(); ++k)
+      areas += std::string(k ? "," : "") + "{\"a\":" + JsonString(p.areas[k].name) + ",\"s\":" +
+               i(p.areas[k].seconds) + ",\"d\":" + i(p.areas[k].deaths) + "}";
+    std::string levels = "[";
+    for (size_t k = 0; k < p.levels.size(); ++k)
+      levels += std::string(k ? "," : "") + "[" + JsonNum(p.levels[k].first, 3) + "," + i(p.levels[k].second) + "]";
+    return "{\"name\":" + JsonString(p.name) + ",\"level\":" + i(p.level) + ",\"ng\":" + i(p.ng) +
+           ",\"hp\":" + pair(p.hp) + ",\"fp\":" + pair(p.fp) + ",\"stamina\":" + pair(p.stamina) +
+           ",\"attrs\":" + attrs + "],\"souls\":" + i(p.souls) + ",\"deaths\":" + i(p.deaths) +
+           ",\"playSeconds\":" + i(p.playSeconds) + ",\"age\":" + i(p.ageSeconds) +
+           ",\"area\":" + JsonString(p.area) + ",\"region\":" + JsonString(p.region) +
+           ",\"bonfire\":" + JsonString(p.bonfire) + ",\"elsewhere\":" + b(p.elsewhere) +
+           ",\"beyond\":" + JsonString(p.beyond) +
+           ",\"bosses\":" + pair(p.bosses) + ",\"keys\":" + pair(p.keys) +
+           ",\"held\":" + i(p.keysHeld) + ",\"items\":" + pair(p.items) + ",\"areas\":" + areas +
+           "],\"levels\":" + levels + "]}";
+  };
+  auto rows = [&](const std::vector<CoopRow>& v, bool held) {
+    std::string a = "[";
+    for (size_t k = 0; k < v.size(); ++k) {
+      a += std::string(k ? "," : "") + "{\"n\":" + JsonString(v[k].name) + ",\"g\":" + JsonString(v[k].group) +
+           ",\"m\":" + b(v[k].me) + ",\"p\":" + b(v[k].partner);
+      if (held) a += ",\"mh\":" + b(v[k].meHeld) + ",\"ph\":" + b(v[k].partnerHeld);
+      a += "}";
+    }
+    return a + "]";
+  };
+  std::string items = "[";
+  for (size_t k = 0; k < c.items.size(); ++k)
+    items += std::string(k ? "," : "") + "{\"a\":" + JsonString(c.items[k].area) + ",\"t\":" + i(c.items[k].total) +
+             ",\"m\":" + i(c.items[k].me) + ",\"p\":" + i(c.items[k].partner) + ",\"b\":" + i(c.items[k].both) + "}";
+  std::string notes = "[";
+  for (size_t k = 0; k < c.notes.size(); ++k) notes += (k ? "," : "") + JsonString(c.notes[k]);
+  return "{\"mineReady\":" + b(mineReady) + ",\"loaded\":" + b(loaded) + ",\"loadedName\":" +
+         JsonString(loadedName) + ",\"tier\":" + i(tier) + ",\"me\":" + player(c.me) + ",\"partner\":" +
+         player(c.partner) + ",\"where\":{\"sameMap\":" + b(c.sameMap) + ",\"dist\":" + JsonNum(c.dist, 1) +
+         ",\"dy\":" + JsonNum(c.dy, 1) + ",\"clock\":" + JsonString(c.clock) + "},\"bosses\":{\"compared\":" +
+         b(c.bossesCompared) + ",\"rows\":" + rows(c.bosses, false) + "},\"keys\":{\"compared\":" +
+         b(c.keysCompared) + ",\"rows\":" + rows(c.keys, true) + "},\"items\":{\"compared\":" +
+         b(c.itemsCompared) + ",\"rows\":" + items + "]},\"notes\":" + notes + "]}";
+}
+
+// The pair report's part of /api/coop.
+std::string CoopPairJson(const CoopPair& c) {
+  auto i = [](long long v) { return std::to_string(v); };
+  auto player = [&](const CoopPairPlayer& p) -> std::string {
+    if (!p.shown) return "null";
+    std::string j = "{\"totals\":{\"seconds\":" + i(p.totals[0]) + ",\"deaths\":" + i(p.totals[1]) + ",\"lost\":" +
+                    i(p.totals[2]) + ",\"recovered\":" + i(p.totals[3]) + ",\"gained\":" + i(p.totals[4]) +
+                    ",\"longest\":" + i(p.totals[5]) + "},\"sessions\":[";
+    for (size_t k = 0; k < p.sessions.size(); ++k) {
+      const auto& x = p.sessions[k];
+      std::string areas = "[", weapons = "[";
+      for (size_t a = 0; a < x.areas.size(); ++a) areas += (a ? "," : "") + JsonString(x.areas[a]);
+      for (int h = 0; h < 2; ++h)
+        weapons += std::string(h ? "," : "") +
+                   (x.weapons[h].any ? "{\"name\":" + JsonString(x.weapons[h].name) + ",\"upgrade\":" + i(x.weapons[h].upgrade) + "}"
+                                     : "null");
+      j += std::string(k ? "," : "") + "{\"start\":" + i(x.startMin) + ",\"minutes\":" + i(x.minutes) + ",\"deaths\":" +
+           i(x.deaths) + ",\"gained\":" + i(x.gained) + ",\"levels\":[" + i(x.levelStart) + "," + i(x.levelEnd) +
+           "],\"areas\":" + areas + "],\"kills\":" + i(x.kills) + ",\"weapons\":" + weapons + "]}";
+    }
+    j += "],\"bosses\":[";
+    for (size_t k = 0; k < p.bosses.size(); ++k) {
+      const auto& b = p.bosses[k];
+      j += std::string(k ? "," : "") + "{\"name\":" + JsonString(b.name) + ",\"area\":" + JsonString(b.area) +
+           ",\"deaths\":" + i(b.deaths) + ",\"ttk\":" + (b.ttkMin < 0 ? std::string("null") : i(b.ttkMin)) +
+           ",\"session\":" + i(b.session) + ",\"kill\":" + i(b.killMin) + "}";
+    }
+    auto mark = [&](const CoopPairPlayer::Mark& m) {
+      return m.have ? "{\"seconds\":" + i(m.seconds) + ",\"session\":" + i(m.session) + ",\"area\":" + JsonString(m.area) + "}"
+                    : std::string("null");
+    };
+    return j + "],\"life\":" + mark(p.life) + ",\"firstDeath\":" + mark(p.firstDeath) + "}";
+  };
+  std::string t = "[";
+  for (size_t k = 0; k < c.together.size(); ++k)
+    t += std::string(k ? "," : "") + "{\"me\":" + i(static_cast<long long>(c.together[k].me)) + ",\"partner\":" +
+         i(static_cast<long long>(c.together[k].partner)) + ",\"start\":" + i(c.together[k].startMin) +
+         ",\"minutes\":" + i(c.together[k].minutes) + "}";
+  return "{\"me\":" + player(c.me) + ",\"partner\":" + player(c.partner) + ",\"together\":{\"minutes\":" +
+         i(c.togetherMinutes) + ",\"blocks\":" + t + "]}}";
+}
+
+// region_areas.tsv's area names, sorted: the list behind a code's recorded
+// time and deaths per area.
+const std::vector<std::string>& CoopAreaList() {
+  static const std::vector<std::string> list = [] {
+    std::set<std::string> names;
+    for (const auto& [id, area] : LoadIdNameTable(Paths().Data(L"region_areas.tsv")))
+      if (!area.empty()) names.insert(area);
+    std::vector<std::string> v(names.begin(), names.end());
+    if (v.size() > kCoopMaxAreas) v.resize(kCoopMaxAreas);
+    return v;
+  }();
+  return list;
+}
+
+// Every saved session log of one character (sessions\<name>\*.jsonl).
+std::vector<std::string> CharacterSessionLogs(const std::string& character) {
+  std::vector<std::string> logs;
+  std::wstring dir = Paths().Sessions() + L"\\" + SafeFolderName(character);
+  WIN32_FIND_DATAW f;
+  HANDLE h = FindFirstFileW((dir + L"\\*.jsonl").c_str(), &f);
+  if (h == INVALID_HANDLE_VALUE) return logs;
+  do logs.push_back(ReadWholeFile(dir + L"\\" + f.cFileName));
+  while (FindNextFileW(h, &f));
+  FindClose(h);
+  return logs;
+}
+
+// g_coop.mine's recorded part, summed again when the character changed or
+// it's over 30s old. Reads files: call without g_coop.lock held.
+void RefreshMyCoopRecord() {
+  std::string character;
+  std::vector<uint32_t> bossFlags;
+  {
+    std::lock_guard<std::mutex> guard(g_coop.lock);
+    character = g_coop.mine.characterName;
+    bossFlags = g_coop.lists.bossFlags;
+    if (character.empty() ||
+        (character == g_coop.recordedFor && GetTickCount64() - g_coop.recordedAt < 30000))
+      return;
+  }
+  SharedGameState recorded;
+  SummariseCoopSessions(CharacterSessionLogs(character), CoopAreaList(), bossFlags, &recorded);
+  std::lock_guard<std::mutex> guard(g_coop.lock);
+  if (g_coop.mine.characterName != character) return;
+  SharedGameState& m = g_coop.mine;
+  m.areaListFingerprint = recorded.areaListFingerprint;
+  m.areas = recorded.areas;
+  m.levels = recorded.levels;
+  std::copy(recorded.totals, recorded.totals + 6, m.totals);
+  m.sessionAreaBits = recorded.sessionAreaBits;
+  m.sessionWeapons = recorded.sessionWeapons;
+  m.sessions = recorded.sessions;
+  m.bossRecords = recorded.bossRecords;
+  m.lifeSec = recorded.lifeSec, m.lifeSession = recorded.lifeSession, m.lifeArea = recorded.lifeArea;
+  m.firstDeathAt = recorded.firstDeathAt, m.firstDeathSession = recorded.firstDeathSession;
+  m.firstDeathArea = recorded.firstDeathArea;
+  g_coop.recordedFor = character;
+  g_coop.recordedAt = GetTickCount64();
+}
+
 struct LiveServer {
   SOCKET listener = INVALID_SOCKET;
   HANDLE thread = nullptr;
@@ -11172,6 +13001,23 @@ void HandleLiveRequest(SOCKET c) {
     }
     std::string page((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
     SendResponse(c, "200 OK", "text/html; charset=utf-8", page);
+  } else if (method == "GET" && path == "/results") {
+    // The results page (as `report` builds it), built fresh from the saved
+    // sessions; served here so its co-op card can swap codes.
+    std::string page = ResultsPageHtml(nullptr, nullptr);
+    if (page.empty())
+      SendResponse(c, "404 Not Found", "text/plain", "templates/results_template.html not found");
+    else
+      SendResponse(c, "200 OK", "text/html; charset=utf-8", page);
+  } else if (method == "GET" && path == "/api/sessions") {
+    // The saved sessions for the results page to redraw from as you play:
+    // {"stamp", "sessions"}, or only {"stamp"} when `have` is already the
+    // stamp (nothing recorded since), so polling reads no files.
+    std::string stamp = SessionsStamp();
+    if (param("have") == stamp)
+      SendResponse(c, "200 OK", "application/json", "{\"stamp\":\"" + stamp + "\"}");
+    else
+      SendResponse(c, "200 OK", "application/json", "{\"stamp\":\"" + stamp + "\",\"sessions\":" + SessionsJson(nullptr, nullptr) + "}");
   } else if (method == "GET" && path == "/api/state") {
     g_live.lastStatePoll = GetTickCount64();
     WindowSnapshot snap;
@@ -11234,6 +13080,104 @@ void HandleLiveRequest(SOCKET c) {
     SaveSettings();
     PostMessageW(g_window.hwnd, kMsgOverlaySettings, 0, 0);
     SendResponse(c, ok ? "200 OK" : "400 Bad Request", "application/json", ok ? "{\"ok\":true}" : "{\"ok\":false}");
+  } else if (method == "GET" && path == "/api/coop/code") {
+    // This player's state as a code to send the partner (a FullSnapshot),
+    // with the recorded part summed from the saved sessions.
+    RefreshMyCoopRecord();
+    std::string code, leftOut;
+    {
+      std::lock_guard<std::mutex> guard(g_coop.lock);
+      if (g_coop.mineReady) code = FitCoopCode(g_coop.mine, ++g_coop.sequence, &leftOut);
+    }
+    if (code.empty())
+      SendResponse(c, "409 Conflict", "application/json",
+                   "{\"ok\":false,\"error\":\"Not ready yet: load into the game and keep this page open for a few "
+                   "seconds.\"}");
+    else
+      SendResponse(c, "200 OK", "application/json",
+                   "{\"ok\":true,\"code\":" + JsonString(code) + ",\"leftOut\":" + JsonString(leftOut) + "}");
+  } else if (method == "GET" && path == "/api/coop") {
+    // The results page's comparison of both players. Polling it counts as
+    // the page being open, so your flag sets keep being read.
+    g_live.lastStatePoll = GetTickCount64();
+    RefreshMyCoopRecord();
+    SharedGameState mine, partner;
+    CoopLists lists;
+    bool mineReady = false, havePartner = false;
+    {
+      std::lock_guard<std::mutex> guard(g_coop.lock);
+      mine = g_coop.mine;
+      partner = g_coop.partner;
+      lists = g_coop.lists;
+      mineReady = g_coop.mineReady;
+      havePartner = g_coop.havePartner;
+    }
+    // Before your own flags are read (not in the game yet), the boss list
+    // comes straight from bosses.tsv: the same list, in the same order.
+    if (lists.bossFlags.empty()) {
+      for (const auto& b : Bosses()) {
+        lists.bossNames.push_back(b.name);
+        lists.bossAreas.push_back(b.area);
+        lists.bossFlags.push_back(b.flag);
+      }
+    }
+    static const AreaInfo areaInfo;
+    const AreaNames names;
+    const int tier = SpoilerTier();
+    CoopCompare cmp = BuildCoopCompare(mine, !mine.characterName.empty(), partner, havePartner, lists,
+                                       CoopAreaList(), areaInfo.AreaOf(mine.playRegionId),
+                                       static_cast<uint32_t>(std::time(nullptr)), tier);
+    // Where each of you is, by name; your partner's at the tier, as the live
+    // page's route hints show places (at Category: "a new area beyond ...").
+    static const std::vector<RouteStep> route = LoadRoute();
+    auto fromOf = [&](const std::string& area) {
+      for (const auto& st : route)
+        if (st.area == area && st.from != "-") return st.from;
+      return std::string();
+    };
+    auto place = [&](CoopPlayerView* v, const SharedGameState& s, const std::set<std::string>* reached) {
+      const std::string area = areaInfo.AreaOf(s.playRegionId);
+      CoopPlaceView(v, area, s.playRegionId ? names.Region(s.playRegionId) : "",
+                    s.lastBonfireId > 0 ? names.Bonfire(s.lastBonfireId) : "", reached, tier, fromOf(area));
+    };
+    place(&cmp.me, mine, nullptr);
+    place(&cmp.partner, partner, &cmp.reached);
+    // The pair report: both players' recorded play, filtered the same way.
+    CoopPair pair = BuildCoopPair(mine, !mine.characterName.empty(), partner, havePartner, lists, CoopAreaList(),
+                                  cmp.reached, [](int32_t id) {
+                                    const auto& table = ItemNames().weapon;
+                                    auto it = table.find(std::to_string(id));
+                                    return it == table.end() ? std::string() : it->second;
+                                  }, tier);
+    std::string json = CoopCompareJson(cmp, mineReady, havePartner, partner.characterName, tier);
+    json.insert(json.size() - 1, ",\"pair\":" + CoopPairJson(pair));
+    SendResponse(c, "200 OK", "application/json", json);
+  } else if (method == "POST" && path == "/api/coop/partner") {
+    // ?code=WASD-... (the partner's code, whitespace already removed) or ?clear=1
+    if (param("clear") == "1") {
+      {
+        std::lock_guard<std::mutex> guard(g_coop.lock);
+        g_coop.havePartner = false;
+        g_coop.partner = SharedGameState();
+      }
+      Log("Co-op: partner code cleared.");
+      SendResponse(c, "200 OK", "application/json", "{\"ok\":true}");
+      return;
+    }
+    CoopPacket p = CoopDecodeText(param("code"));
+    if (!p.ok) {
+      Log("Co-op: partner code refused: %s", p.error.c_str());
+      SendResponse(c, "400 Bad Request", "application/json", "{\"ok\":false,\"error\":" + JsonString(p.error) + "}");
+      return;
+    }
+    {
+      std::lock_guard<std::mutex> guard(g_coop.lock);
+      g_coop.partner = p.state;
+      g_coop.havePartner = true;
+    }
+    Log("Co-op: partner code loaded (%s, level %u, sequence %u).", p.state.characterName.c_str(), p.state.level,
+        p.sequence);
+    SendResponse(c, "200 OK", "application/json", "{\"ok\":true,\"name\":" + JsonString(p.state.characterName) + "}");
   } else {
     SendResponse(c, "404 Not Found", "text/plain", "not found");
   }
@@ -11334,6 +13278,19 @@ int RunCommand(int argc, wchar_t** argv) {
   }
   if (mode == L"--version" || mode == L"version") {
     std::printf("%s %s\n", WASD_APP_NAME, WASD_VERSION_STRING);
+    return 0;
+  }
+  if (mode == L"coop") {  // coop <code>: what a co-op code holds (no game needed)
+    if (argc < 3) {
+      std::fwprintf(stderr, L"usage: %ls coop <WASD-... code>\n", argv[0]);
+      return 1;
+    }
+    CoopPacket p = CoopDecodeText(Utf8(argv[2]));
+    if (!p.ok) {
+      std::printf("Not a usable code: %s\n", p.error.c_str());
+      return 1;
+    }
+    std::printf("%s", DescribeCoopPacket(p).c_str());
     return 0;
   }
   // Spoiler tier: saved setting, or --full for this run.

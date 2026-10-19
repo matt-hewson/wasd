@@ -6,219 +6,623 @@
 <title>WASD Results</title>
 <!-- Results page for WASD. `wasd-cli.exe report` copies this
      template (templates/results_template.html) to reports/results.html with every saved session (sessions/*/*.jsonl)
-     injected in place of the data token on the SESSIONS line below, then opens it. Everything is
-     inline: no network, no install. Palette and chart rules follow the dataviz
-     reference palette (light + dark selected separately). -->
+     injected in place of the data token on the SESSIONS line below, then opens it. The live page's
+     Results button opens the same page served by WASD at /results, built fresh, where the co-op
+     cards also swap codes with your partner and compare the two of you (through WASD's own
+     /api/coop, on this PC), and keeps itself current as you play (/api/sessions). It's the only page that shows co-op data. Everything
+     else is inline: no network, no install, no fonts to fetch. One theme, the guide's Bonfire
+     (dark, warm), with Windows system fonts. -->
 <style>
   :root {
-    color-scheme: light;
-    --page: #f9f9f7;
-    --surface-1: #fcfcfb;
-    --text-primary: #0b0b0b;
-    --text-secondary: #52514e;
-    --text-muted: #898781;
-    --grid: #e1e0d9;
-    --axis: #c3c2b7;
-    --border: rgba(11, 11, 11, 0.10);
-    --series-1: #2a78d6;
-    --series-2: #eb6834;
-    --height-lo: #86b6ef;
-    --height-hi: #104281;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --page: #0d0d0d;
-      --surface-1: #1a1a19;
-      --text-primary: #ffffff;
-      --text-secondary: #c3c2b7;
-      --text-muted: #898781;
-      --grid: #2c2c2a;
-      --axis: #383835;
-      --border: rgba(255, 255, 255, 0.10);
-      --series-1: #3987e5;
-      --series-2: #d95926;
-      --height-lo: #184f95;
-      --height-hi: #b7d3f6;
-    }
-  }
-  :root[data-theme="dark"] {
     color-scheme: dark;
-    --page: #0d0d0d;
-    --surface-1: #1a1a19;
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.10);
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --height-lo: #184f95;
-    --height-hi: #b7d3f6;
+    --bg: #0e0c0a;
+    --panel: rgba(24, 19, 14, .82);
+    --cell: rgba(255, 240, 220, .035);
+    --track: rgba(255, 240, 220, .05);
+    --line: rgba(214, 170, 110, .13);
+    --rule: rgba(214, 170, 110, .16);
+    --ctl: rgba(214, 170, 110, .25);
+    --hover: rgba(214, 170, 110, .08);
+    --text: #e8dfcf;
+    --bright: #f1e6d2;
+    --soft: #cfc3ae;
+    --dim: #a8987e;
+    --meta: #8f826d;
+    --faint: #7d715f;
+    --muted: #6f6455;
+    --title: #cdb48a;
+    --acc: oklch(0.72 0.14 58);
+    --acc-ink: #1b1007;
+    --death: oklch(0.62 0.17 25);
+    --good: oklch(0.75 0.12 140);
+    --bad: oklch(0.70 0.13 30);
+    --you: #efe2c8;
+    --partner: oklch(0.74 0.11 320);
+    --partner-text: oklch(0.82 0.09 320);
+    --serif: 'Palatino Linotype', Palatino, 'Book Antiqua', Georgia, serif;
+    --mono: Consolas, ui-monospace, monospace;
+    /* The names the co-op comparison's charts draw with. */
+    --series-1: var(--you);
+    --series-2: var(--partner);
+    --text-primary: var(--text);
+    --text-secondary: var(--dim);
+    --text-muted: var(--meta);
+    --grid: rgba(214, 170, 110, .08);
+    --axis: rgba(214, 170, 110, .22);
+    --surface-1: #18130e;
+    --border: var(--line);
+    --page: #110e0b;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   body {
-    margin: 0;
-    background: var(--page);
-    color: var(--text-primary);
-    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    margin: 0; min-height: 100vh; color: var(--text);
+    background: var(--bg) radial-gradient(ellipse 90% 520px at 50% -80px, #24190f 0%, #0e0c0a 100%) no-repeat;
+    font: 13px/1.45 'Segoe UI', system-ui, sans-serif; font-variant-numeric: tabular-nums;
   }
-  main { max-width: 1040px; margin: 0 auto; padding: 24px 16px 48px; }
-  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 24px; margin-bottom: 20px; }
-  h1 { font-size: 24px; margin: 0; font-weight: 650; }
-  .sub { color: var(--text-secondary); }
-  label.picker { margin-left: auto; color: var(--text-secondary); font-size: 14px; }
-  select {
-    font: inherit; color: var(--text-primary); background: var(--surface-1);
-    border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; margin-left: 6px;
-  }
-  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 16px; }
-  .tile, .card {
-    background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
-  }
-  .tile { padding: 14px 16px; }
-  .tile .k { color: var(--text-secondary); font-size: 13px; }
-  .tile .v { font-size: 26px; font-weight: 650; margin-top: 2px; }
-  .tile .v.text { font-size: 17px; line-height: 1.3; margin-top: 6px; }
-  .tile .n { color: var(--text-muted); font-size: 12.5px; margin-top: 2px; }
-  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 16px; margin-bottom: 16px; }
-  @media (max-width: 480px) { .grid2 { grid-template-columns: 1fr; } }
-  .card { padding: 16px; min-width: 0; }
-  .card h2 { font-size: 15px; margin: 0 0 2px; font-weight: 650; }
-  .card .cap { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
-  .card .row { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-  .card .row select { margin-left: auto; }
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(214, 170, 110, .2); }
+  a { color: #d9b98a; }
+  button { font: inherit; color: inherit; }
+  .u { all: unset; cursor: pointer; box-sizing: border-box; }
+  .u:focus-visible, .btn:focus-visible { outline: 1px solid var(--acc); outline-offset: 2px; }
+  .u:disabled { cursor: default; }
+  main { max-width: 1360px; margin: 0 auto; padding: 28px 32px 64px; display: flex; flex-direction: column; gap: 18px; }
+  @media (max-width: 700px) { main { padding: 20px 16px 48px; } }
+
+  /* header */
+  header.top { display: flex; align-items: flex-end; gap: 24px; flex-wrap: wrap; padding-bottom: 18px; border-bottom: 1px solid var(--rule); }
+  .htitle { flex: 1; min-width: 300px; display: flex; flex-direction: column; gap: 4px; }
+  .eyebrow { font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--dim); }
+  h1 { margin: 0; font: 400 36px/1.1 var(--serif); color: var(--bright); }
+  .subtitle { font-size: 13.5px; color: var(--dim); }
+  .hctl { display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap; }
+  .ctl { display: flex; flex-direction: column; gap: 5px; position: relative; }
+  .ctl-label { font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--meta); }
+  .pick { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border: 1px solid var(--ctl); border-radius: 3px; min-width: 170px; font-size: 13px; }
+  .pick:hover { background: var(--hover); }
+  .pick .name { flex: 1; }
+  .pick .caret { color: var(--meta); }
+  .menu { position: absolute; top: 100%; left: 0; margin-top: 4px; width: 240px; z-index: 5; background: #1b1611; border: 1px solid rgba(214, 170, 110, .3);
+          box-shadow: 0 14px 30px rgba(0, 0, 0, .6); padding: 6px; display: flex; flex-direction: column; }
+  .menu button { display: flex; justify-content: space-between; gap: 10px; padding: 8px 10px; }
+  .menu button:hover, .menu button.on { background: rgba(214, 140, 60, .09); }
+  .menu button .n { color: var(--dim); white-space: nowrap; }
+  .seg { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--ctl); border-radius: 3px; }
+  .seg button { display: flex; align-items: center; gap: 7px; padding: 6px 13px; font-size: 13px; border-radius: 2px; color: var(--dim); transition: background .25s, color .25s; }
+  .seg button.on { background: var(--acc); color: var(--acc-ink); }
+  .seg button:disabled { opacity: .45; }
+  .seg .d { width: 7px; height: 7px; border-radius: 50%; background: var(--you); }
+  .seg .d.partner { background: var(--partner); }
+  .seg .d.over { margin-left: -10px; }
+
+  /* panels */
+  .panel { padding: 16px 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+  .ph { display: flex; align-items: center; gap: 10px; }
+  .pt { font: 12px var(--serif); letter-spacing: .2em; text-transform: uppercase; color: var(--title); white-space: nowrap; }
+  .rule { flex: 1; height: 1px; background: var(--rule); }
+  .meta { font-size: 11px; color: var(--meta); }
+  .note { font-size: 11.5px; color: var(--meta); }
+  .empty { color: var(--meta); font-size: 13px; padding: 18px 0; text-align: center; }
+  .pair2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 440px), 1fr)); gap: 18px; }
+
+  /* buttons and inputs */
+  .btn { all: unset; cursor: pointer; box-sizing: border-box; padding: 6px 12px; border: 1px solid var(--ctl); border-radius: 3px; font-size: 12.5px; color: var(--text); }
+  .btn:hover { background: var(--hover); }
+  .btn.primary { background: var(--acc); border-color: var(--acc); color: var(--acc-ink); }
+  .btn:disabled { cursor: default; opacity: .45; background: none; color: var(--dim); }
+
+  /* co-op codes */
+  .coopbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .coopmsg { font-size: 12px; color: var(--dim); }
+  .coopmsg.err { color: var(--bad); }
+  #coop textarea { display: block; width: 100%; resize: vertical; min-height: 54px; padding: 7px 9px; font: 12px var(--mono); color: var(--text);
+                   background: rgba(0, 0, 0, .25); border: 1px solid var(--ctl); border-radius: 3px; word-break: break-all; }
+  #coop textarea:disabled { opacity: .45; }
+  .coopstate { font-size: 12.5px; color: var(--soft); margin: 0; }
+
+  /* tiles */
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px; }
+  .tile { padding: 14px 16px; background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .tile .k { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .tile .v { font: 30px/1.15 var(--serif); color: var(--bright); text-wrap: balance; overflow-wrap: anywhere; }
+  .tile .v.text { font-size: 19px; }
+  .tile .s { font-size: 11.5px; color: var(--meta); margin-top: 2px; text-wrap: pretty; }
+
+  /* area map */
+  .mapp { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; display: grid; grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); overflow: hidden; }
+  @media (max-width: 760px) { .mapp { grid-template-columns: 1fr; } .mlist { max-height: 220px !important; border-right: 0 !important; border-bottom: 1px solid var(--line); } }
+  .mlist { padding: 16px 0 12px; border-right: 1px solid rgba(214, 170, 110, .12); display: flex; flex-direction: column; min-height: 0; max-height: 620px; }
+  .mlist .ph { padding: 0 16px 10px; }
+  .mitems { overflow: auto; display: flex; flex-direction: column; }
+  .mitems button { display: flex; flex-direction: column; gap: 2px; padding: 8px 16px; transition: background .2s; }
+  .mitems button:hover { background: rgba(214, 140, 60, .12); }
+  .mitems button.on { background: rgba(214, 140, 60, .12); box-shadow: inset 2px 0 0 var(--acc); }
+  .mitems .an { font-size: 13.5px; color: var(--soft); }
+  .mitems button.on .an { color: var(--bright); }
+  .mitems .as { font-size: 11px; color: var(--meta); }
+  .mcanvas { position: relative; height: 620px; min-width: 0; background: #110e0b; }
+  @media (max-width: 760px) { .mcanvas { height: 460px; } }
+  .mcanvas canvas { position: absolute; inset: 0; width: 100%; height: 100%; cursor: grab; touch-action: none; }
+  .mcanvas canvas.dragging { cursor: grabbing; }
+  .mcanvas .mempty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--meta); padding: 24px; text-align: center; }
+  .mtitle { position: absolute; top: 14px; left: 16px; display: flex; flex-direction: column; gap: 2px; pointer-events: none; }
+  .mtitle .t { font: 22px var(--serif); color: var(--bright); }
+  .mtitle .s { font-size: 12px; color: var(--dim); }
+  .mtitle .h { font-size: 11px; color: var(--faint); }
+  .mtools { position: absolute; top: 14px; right: 14px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+  .mseg { display: flex; gap: 2px; padding: 2px; background: rgba(24, 19, 14, .92); border: 1px solid var(--ctl); }
+  .mseg button { padding: 5px 10px; font-size: 12px; color: var(--text); }
+  .mseg button.on { background: var(--acc); color: var(--acc-ink); }
+  .mbtn { min-width: 28px; height: 28px; padding: 0 10px; display: grid; place-items: center; background: rgba(24, 19, 14, .92); border: 1px solid var(--ctl); font-size: 12px; }
+  .mbtn.sq { width: 28px; padding: 0; font-size: 14px; }
+  .mheight { position: absolute; top: 56px; right: 14px; display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: rgba(24, 19, 14, .92);
+             border: 1px solid var(--rule); font-size: 12px; }
+  .mheight span:first-child { color: var(--dim); }
+  .mheight input { width: 120px; accent-color: var(--acc); }
+  .mheight .x { width: 30px; text-align: right; font-family: var(--mono); }
+  .mlegend { position: absolute; left: 16px; bottom: 14px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 8px 12px; background: rgba(24, 19, 14, .92);
+             border: 1px solid var(--rule); font-size: 11.5px; color: var(--dim); max-width: calc(100% - 32px); }
+  .mlegend > span { display: flex; align-items: center; gap: 6px; }
+  .mlegend .ramp { width: 90px; height: 5px; background: linear-gradient(90deg, #4f7391, #b9a68a, #f0b45a); }
+  .mlegend .hr { font-family: var(--mono); color: var(--meta); }
+  .mlegend .x { color: var(--death); font-weight: 700; }
+  .mlegend .dia { width: 7px; height: 7px; transform: rotate(45deg); background: oklch(0.80 0.14 75); }
+
+  /* bars per area */
+  .brow { display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr) 82px; gap: 12px; align-items: center; min-height: 22px; }
+  .brow .n { font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
+  .brow.zero .n { color: var(--muted); }
+  .brow .tr { height: 8px; background: var(--track); }
+  .brow .fill { height: 100%; transition: width .5s ease; }
+  .brow .v { text-align: right; font-size: 12.5px; color: var(--text); white-space: nowrap; }
+
+  /* soul level */
+  .lvl { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 8px; }
+  .lvl .ya, .lvl .plot { position: relative; height: 230px; }
+  .lvl .ya span { position: absolute; right: 0; transform: translateY(-50%); font-size: 11px; color: var(--meta); }
+  .lvl .plot { border-left: 1px solid rgba(214, 170, 110, .18); border-bottom: 1px solid rgba(214, 170, 110, .18); }
+  .lvl .gl { position: absolute; left: 0; right: 0; height: 1px; background: rgba(214, 170, 110, .06); }
+  .lvl svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+  .lvl .end { position: absolute; transform: translate(calc(-100% - 6px), -125%); font: 15px var(--serif); color: var(--bright); white-space: nowrap; pointer-events: none; }
+  .lvl .cross { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(214, 170, 110, .35); pointer-events: none; }
+  .lvl .dot { position: absolute; width: 9px; height: 9px; border-radius: 50%; background: var(--acc); border: 2px solid #110e0b; transform: translate(-50%, -50%); pointer-events: none; }
+  .lvl .xa { position: relative; height: 16px; }
+  .lvl .xa span { position: absolute; transform: translateX(-50%); font-size: 11px; color: var(--meta); white-space: nowrap; }
+
+  /* bosses */
+  .bt { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.6fr) 110px 110px; gap: 16px; align-items: center; padding: 8px 0;
+        border-bottom: 1px solid rgba(214, 170, 110, .07); }
+  .bt.head { padding: 0 0 6px; font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--meta); border-bottom-color: rgba(214, 170, 110, .12); }
+  .bt .num { text-align: right; }
+  .bt .dim { color: var(--dim); font-size: 12px; }
+  .bname { font: 16.5px var(--serif); color: var(--bright); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .bt.open .bname { color: var(--soft); }
+  .barea { font-size: 11px; color: var(--meta); }
+  .bmarks { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12px; }
+  .bmarks .bx { color: var(--death); letter-spacing: 1px; white-space: nowrap; overflow: hidden; }
+  .bmarks .bx em { font-style: normal; color: var(--meta); margin-left: 4px; }
+  .bmarks .ok { color: var(--acc); }
+  .bmarks .bn { color: var(--meta); white-space: nowrap; }
+
+  /* firsts and records */
+  .recs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 10px; }
+  .rec { padding: 12px 14px; background: var(--cell); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .rec .k { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .rec .v { font: 22px/1.15 var(--serif); color: var(--bright); }
+  .rec .d { font-size: 11.5px; color: var(--meta); text-wrap: pretty; }
+
+  /* gear history */
+  .gear { display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 4px 12px; align-items: center; }
+  .gear .gl { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .gt { position: relative; height: 28px; background: rgba(255, 240, 220, .03); }
+  .gt div { position: absolute; top: 0; bottom: 0; border-left: 2px solid #110e0b; display: flex; align-items: center; padding: 0 8px; overflow: hidden;
+            white-space: nowrap; text-overflow: ellipsis; font-size: 12px; color: var(--bright); }
+  .lvl .kill { position: absolute; width: 8px; height: 8px; transform: translate(-50%, -50%) rotate(45deg); background: #110e0b; border: 1.5px solid var(--acc); }
+
+  /* timeline */
+  .tlt { position: relative; height: 18px; }
+  .tlt span { position: absolute; bottom: 0; font-size: 10.5px; color: var(--meta); white-space: nowrap; }
+  .tlk { position: relative; height: 34px; background: rgba(255, 240, 220, .03); }
+  .tlk div { position: absolute; top: 0; bottom: 0; }
+  .tlk div.first { border-left: 2px solid #110e0b; }
+  .tll { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11.5px; color: var(--soft); }
+  .tll span { display: flex; align-items: center; gap: 6px; }
+  .tll i { width: 10px; height: 10px; }
+  .tll em { font-style: normal; color: var(--meta); }
+
+  /* when you play */
+  .heat { display: grid; grid-template-columns: 34px repeat(24, minmax(0, 1fr)); gap: 2px; }
+  .heat .hl { font-size: 10px; color: var(--meta); white-space: nowrap; }
+  .heat .dl { font-size: 11px; color: var(--dim); line-height: 18px; }
+  .heat .c { height: 18px; background: var(--cell); }
+  .heatsum { font-size: 11.5px; color: var(--soft); }
+
+  /* compare two sessions */
+  .chips { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .chips .l { width: 16px; font: 16px var(--serif); color: var(--acc); }
+  .chips .o { display: flex; flex-wrap: wrap; gap: 3px; }
+  .chips button { padding: 3px 8px; font-size: 11.5px; border: 1px solid rgba(214, 170, 110, .2); color: var(--soft); transition: background .2s; }
+  .chips button:hover { background: var(--hover); }
+  .chips button.on { background: var(--acc); border-color: var(--acc); color: var(--acc-ink); }
+  .cmpt { display: grid; grid-template-columns: minmax(120px, 180px) minmax(0, 1fr) minmax(0, 1fr) 110px; margin-top: 4px; font-size: 12.5px; }
+  .cmpt > span { padding: 6px 12px 6px 0; border-bottom: 1px solid rgba(214, 170, 110, .06); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cmpt .k { color: var(--dim); }
+  .cmpt .h { font: 16px var(--serif); color: var(--bright); border-bottom-color: rgba(214, 170, 110, .14); }
+  .cmpt .hk { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--meta); border-bottom-color: rgba(214, 170, 110, .14); align-self: end; }
+  .cmpt .d { text-align: right; padding-right: 0; color: var(--meta); }
+  .cmpt .d.good { color: var(--good); }
+  .cmpt .d.bad { color: var(--bad); }
+
+  /* sessions table */
+  .stwrap { overflow-x: auto; }
+  .st { min-width: 900px; }
+  .st .r { display: grid; grid-template-columns: 44px 120px 56px 64px minmax(0, 1fr) 56px 80px 80px minmax(0, .8fr); gap: 12px; align-items: center; padding: 7px 0;
+           border-bottom: 1px solid rgba(214, 170, 110, .06); font-size: 12.5px; }
+  .st .r.head { padding: 0 0 6px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--meta); border-bottom-color: rgba(214, 170, 110, .14); }
+  .st .r span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .st .num { text-align: right; }
+  .st .dim { color: var(--dim); }
+
+  /* tool performance */
+  .perf { background: rgba(24, 19, 14, .6); border: 1px solid rgba(214, 170, 110, .1); border-radius: 3px; display: flex; flex-direction: column; }
+  .perf > button { display: flex; align-items: center; gap: 12px; padding: 12px 18px; }
+  .perf > button:hover { background: rgba(214, 170, 110, .05); }
+  .perf .ar { font-size: 11px; color: var(--meta); width: 10px; }
+  .perf .lb { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+  .perf .vd { font-size: 12.5px; color: var(--soft); flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .perf .dg { font-size: 11px; color: var(--faint); }
+  .perfbody { padding: 4px 18px 18px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 18px; }
+  .pc { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .pc .hd { display: flex; justify-content: space-between; font-size: 11.5px; }
+  .pc .hd span:first-child { color: var(--dim); }
+  .pc .hd span:last-child { color: var(--meta); font-family: var(--mono); }
+  .pc .bars { height: 90px; display: flex; align-items: flex-end; gap: 2px; border-bottom: 1px solid var(--rule); }
+  .pc .b { flex: 1; position: relative; height: 100%; display: flex; align-items: flex-end; }
+  .pc .b > i { display: block; width: 100%; }
+  .pc .b > b { position: absolute; left: 0; right: 0; height: 2px; background: var(--death); }
+  .pc .nt { font-size: 10.5px; color: var(--faint); }
+
+  footer { display: flex; gap: 16px; flex-wrap: wrap; font-size: 11px; color: var(--faint); padding-top: 6px; }
+  footer .sp { flex: 1; }
+
+  #tip { position: fixed; pointer-events: none; z-index: 10; display: none; background: #1b1611; color: var(--text); border: 1px solid rgba(214, 170, 110, .3);
+         padding: 6px 10px; font-size: 12.5px; box-shadow: 0 10px 24px rgba(0, 0, 0, .55); max-width: 280px; }
+  #tip b { font-weight: 600; color: var(--bright); }
+  #tip .m { color: var(--dim); }
+
+  /* pair mode */
+  .pd { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--you); flex: none; }
+  .pd.them { background: var(--partner); }
+  .pd.together { background: var(--acc); }
+  .tile .pv { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .tile .v.sm { font-size: 24px; }
+  .tile .v.sm.text { font-size: 16px; }
+  .v.them, .rv .v.them { color: var(--partner-text); }
+  .played { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 28px; padding: 8px 10px; }
+  .played .eyebrow.acc { color: var(--acc); }
+  .played .big { font: 56px/1 var(--serif); color: var(--bright); margin-top: 8px; }
+  .played .sub2 { font-size: 14px; color: var(--soft); margin-top: 8px; }
+  .played .who2 { display: flex; gap: 22px; flex-wrap: wrap; margin-top: 12px; font-size: 12.5px; color: var(--dim); }
+  .played .who2 span { display: flex; align-items: center; gap: 7px; }
+  .played .who2 b { font-weight: 400; }
+  .played b.me { color: var(--you); }
+  .played b.them { color: var(--partner-text); }
+  .pstats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-content: start; }
+  .pstats > div { padding: 10px 12px; background: var(--cell); }
+  .pstats .k { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .pstats .v { font: 26px var(--serif); color: var(--bright); }
+  .pstats .s { font-size: 11px; color: var(--meta); }
+  .brow .two { display: flex; flex-direction: column; gap: 2px; }
+  /* Together's time per area: both times are too wide for the value
+     column, so they show over the row on hover instead. */
+  .brow.hov { grid-template-columns: minmax(0, 190px) minmax(0, 1fr); margin: 0 -6px; padding: 0 6px; border-radius: 3px; cursor: default; }
+  .brow.hov:hover { background: var(--cell); }
+  .brow.hov:hover .n { color: var(--bright); }
+  #tip .tl { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+  #tip .tl .tv { margin-left: auto; padding-left: 14px; color: var(--bright); font-variant-numeric: tabular-nums; }
+  .brow .tr.thin { height: 5px; }
+  .plines { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .pline { display: flex; align-items: center; gap: 8px; min-height: 22px; font-size: 12px; }
+  .pline .bx { color: var(--death); letter-spacing: 1px; white-space: nowrap; overflow: hidden; }
+  .pline .bx em { font-style: normal; color: var(--meta); margin-left: 4px; }
+  .pline .ok { color: var(--acc); }
+  .pline .bn { color: var(--meta); white-space: nowrap; }
+  .pcol { display: flex; flex-direction: column; gap: 3px; }
+  .pcol span { line-height: 22px; }
+  .tag { font: 10px 'Segoe UI', system-ui, sans-serif; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); }
+  .rec .rl { display: flex; flex-direction: column; gap: 1px; }
+  .rec .rv { display: flex; align-items: center; gap: 8px; }
+  .rec .v.sm { font-size: 20px; }
+  .rec .ahead { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--acc); }
+  .joint { display: grid; grid-template-columns: 130px minmax(0, 1fr); gap: 6px 12px; align-items: center; }
+  .joint .ln { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: var(--you); }
+  .joint .ln.together { color: oklch(0.80 0.12 62); }
+  .joint .ln.them { color: var(--partner-text); }
+  .lane { position: relative; height: 30px; background: rgba(255, 240, 220, .03); }
+  .lane.together { height: 40px; }
+  .lane div { position: absolute; top: 3px; bottom: 3px; display: grid; place-items: center; font-size: 10.5px; overflow: hidden; white-space: nowrap;
+              background: rgba(239, 226, 200, .75); color: #1b1007; }
+  .lane.together div { background: var(--acc); }
+  .lane.them div { background: oklch(0.74 0.11 320 / .8); color: #1a0d18; }
+  .hname { display: flex; align-items: center; gap: 7px; font-size: 12.5px; margin: 6px 0; color: var(--you); }
+  .hname.them { color: var(--partner-text); }
+  .who-found { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 460px), 1fr)); gap: 28px; }
+  .wf { display: grid; grid-template-columns: minmax(0, 1fr) 64px 64px 54px 64px; gap: 4px 10px; font-size: 12.5px; }
+  .wf .h { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--meta); padding-bottom: 5px; border-bottom: 1px solid rgba(214, 170, 110, .12); }
+  .wf .h.me { color: var(--you); }
+  .wf .h.them { color: var(--partner-text); }
+  .wf .num { text-align: right; }
+  .wf .dim { color: var(--dim); }
+  .wf .n { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wf .tot { color: var(--bright); padding-top: 6px; border-top: 1px solid rgba(214, 170, 110, .12); }
+  .kg { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  .kg .kt { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--soft); }
+  .kg.together .kt { color: var(--acc); }
+  .kg.me .kt { color: var(--you); }
+  .kg.them .kt { color: var(--partner-text); }
+  .chiplist { display: flex; flex-wrap: wrap; gap: 5px; }
+  .chiplist span { padding: 3px 9px; font-size: 12px; border: 1px solid rgba(214, 170, 110, .22); }
+  .kg.together .chiplist span { border-color: oklch(0.72 0.14 58 / .45); }
+  .chiplist em { font-style: normal; color: var(--muted); font-size: 12px; }
+  .only { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--soft); margin: 4px 0; }
+  .chips button.them { color: var(--partner-text); }
+  .chips button.me { color: var(--you); }
+  .chips button.on { color: var(--acc-ink); }
+  .st .r.pr { grid-template-columns: 96px 120px 56px 64px minmax(0, 1fr) 72px 120px minmax(0, .9fr); }
+  .st .r.together { background: rgba(214, 140, 60, .06); }
+  .st .w.me { color: var(--you); }
+  .st .w.them { color: var(--partner-text); }
+  .st .w.together { color: oklch(0.80 0.12 62); }
+
+  /* Together: the co-op comparison */
+  .cap { font-size: 11.5px; color: var(--meta); margin: 0; }
+  .cap.warn { color: var(--bad); }
+  .players { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .players { grid-template-columns: 1fr; } }
+  .who { background: var(--cell); border-left: 3px solid var(--you); padding: 10px 14px; }
+  .who.b { border-left-color: var(--partner); }
+  .who .wn { font: 22px var(--serif); color: var(--bright); }
+  .who .wn .you { font: 11px 'Segoe UI', system-ui, sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--meta); }
+  .who.b .wn { color: var(--partner-text); }
+  .who .ws { font-size: 12.5px; color: var(--dim); margin-top: 2px; }
+  .who .wa { font-size: 11.5px; color: var(--meta); margin-top: 4px; }
+  .players .where { grid-column: 1 / -1; font-size: 13px; color: var(--soft); }
+  .legend { display: flex; gap: 16px; font-size: 12px; color: var(--dim); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 7px; background: var(--you); }
+  .legend i.b { background: var(--partner); }
+  .stack > div + div { margin-top: 14px; padding-top: 10px; border-top: 1px solid var(--grid); }
+  .overlap { display: flex; height: 10px; overflow: hidden; gap: 2px; margin: 4px 0 6px; }
+  .overkey { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--dim); margin-bottom: 10px; }
+  .overkey i { display: inline-block; width: 9px; height: 9px; margin-right: 6px; vertical-align: -1px; }
+  .fgrid { columns: 2 220px; column-gap: 20px; }
+  .fg { break-inside: avoid; margin-bottom: 10px; }
+  .fg h3 { font-size: 10px; font-weight: 400; letter-spacing: .14em; text-transform: uppercase; color: var(--meta); margin: 0 0 3px; }
+  .fr { display: flex; align-items: center; gap: 5px; font-size: 13px; line-height: 1.6; }
+  .fr span { margin-left: 4px; }
+  .fr .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--axis); box-sizing: border-box; }
+  .fr .dot.a.on { background: var(--you); border-color: var(--you); }
+  .fr .dot.b.on { background: var(--partner); border-color: var(--partner); }
+  .fr .dot.held { box-shadow: 0 0 0 2px var(--surface-1), 0 0 0 3.5px var(--meta); }
   svg { display: block; width: 100%; height: auto; overflow: visible; }
-  svg text { font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .empty { color: var(--text-muted); font-size: 14px; padding: 24px 0; text-align: center; }
-  table { width: 100%; border-collapse: collapse; font-size: 14px; }
-  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--grid); }
-  th { color: var(--text-secondary); font-weight: 600; }
-  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
-  .tablewrap { overflow-x: auto; }
-  #tip {
-    position: fixed; pointer-events: none; z-index: 10; display: none;
-    background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
-    border-radius: 8px; padding: 6px 10px; font-size: 13px; box-shadow: 0 4px 16px rgba(0,0,0,0.15);
-    max-width: 260px;
-  }
-  #tip b { font-weight: 650; }
-  #tip .m { color: var(--text-secondary); }
-  footer { color: var(--text-muted); font-size: 12.5px; margin-top: 20px; }
-  section.card { margin-bottom: 16px; }
-  .mapwrap { display: flex; gap: 10px; align-items: stretch; }
-  canvas.map3d { display: block; flex: 1 1 auto; min-width: 0; border: 1px solid var(--grid); border-radius: 8px; cursor: grab; touch-action: none; }
-  .hslider { flex: 0 0 52px; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 6px 0; }
-  .hslider .val { font-size: 13px; font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-  .hslider .lbl { font-size: 11.5px; color: var(--text-muted); text-align: center; line-height: 1.2; }
-  .hslider input[type=range] {
-    writing-mode: vertical-lr; direction: rtl;  /* vertical, high at the top */
-    flex: 1 1 auto; width: 28px; margin: 0; accent-color: var(--series-1); cursor: ns-resize;
-  }
-  canvas.map3d.dragging { cursor: grabbing; }
-  .mapbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 16px; margin-top: 10px; font-size: 13px; color: var(--text-secondary); }
-  .mapbar .key { display: inline-flex; align-items: center; gap: 6px; }
-  .mapbar .ramp { width: 44px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--height-lo), var(--height-hi)); }
-  .mapbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--series-2); }
-  .mapbar .dia { width: 9px; height: 9px; background: var(--text-primary); transform: rotate(45deg); }
-  .mapbar .hint { color: var(--text-muted); }
-  .perfsum { font-size: 13.5px; color: var(--text-primary); margin: 0 0 12px; font-variant-numeric: tabular-nums; }
-  .perfgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 16px 24px; }
-  @media (max-width: 480px) { .perfgrid { grid-template-columns: 1fr; } }
-  .perfgrid h3 { font-size: 13.5px; font-weight: 600; margin: 0 0 4px; }
-  .perfgrid .legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--text-secondary); margin: 0 0 4px; }
-  .perfgrid .legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 6px; }
-  .mapbar button {
-    margin-left: auto; font: inherit; font-size: 13px; color: var(--text-primary); background: var(--surface-1);
-    border: 1px solid var(--border); border-radius: 6px; padding: 3px 10px; cursor: pointer;
-  }
+  svg text { font-family: 'Segoe UI', system-ui, sans-serif; }
 </style>
 </head>
 <body>
 <main>
-  <header>
-    <h1>WASD Results</h1>
-    <span class="sub" id="subtitle"></span>
-    <label class="picker" id="playerPicker" hidden>Player<select id="player"></select></label>
+  <header class="top">
+    <div class="htitle">
+      <div class="eyebrow">WASD · Dark Souls III · Seamless Co-op</div>
+      <h1 id="title">WASD Results</h1>
+      <div class="subtitle" id="subtitle"></div>
+    </div>
+    <div class="hctl">
+      <div class="ctl" id="charCtl" hidden>
+        <span class="ctl-label">Character on this save</span>
+        <button class="u pick" id="charBtn" aria-haspopup="listbox" aria-expanded="false"><span class="name" id="charName"></span><span class="caret">▾</span></button>
+        <div class="menu" id="charMenu" role="listbox" hidden></div>
+      </div>
+      <div class="ctl" id="tierCtl" hidden>
+        <span class="ctl-label">Spoilers</span>
+        <div class="seg" id="tiers" role="group" aria-label="Spoiler tier"
+             title="The same setting as on the live page and the overlay. Your own results only show what you've done, and your partner's never name anything you haven't reached, at any tier.">
+          <button class="u" data-tier="0" title="Counts only">Off</button>
+          <button class="u" data-tier="1" title="Hints, no names">Vague</button>
+          <button class="u" data-tier="2" title="Kinds &amp; directions">Category</button>
+          <button class="u" data-tier="3" title="Everything named">Full</button>
+        </div>
+      </div>
+      <div class="ctl">
+        <span class="ctl-label">Report for</span>
+        <div class="seg" id="modes">
+          <button class="u on" data-mode="you"><i class="d"></i><span id="modeYou">You</span></button>
+          <button class="u" data-mode="together" disabled title="Load your partner's code below to compare"><i class="d"></i><i class="d partner over"></i>Together</button>
+          <button class="u" data-mode="partner" disabled title="Your partner's own report comes with pair mode"><i class="d partner"></i><span id="modePartner">Partner</span></button>
+        </div>
+      </div>
+    </div>
   </header>
 
-  <section class="tiles" id="tiles"></section>
-
-  <section class="grid2">
-    <div class="card">
-      <h2>Time per area</h2>
-      <p class="cap">Recorded play time, all sessions</p>
-      <div id="areaTime"></div>
+  <section class="panel" id="coop">
+    <div class="ph"><span class="pt">Co-op codes</span><span class="rule"></span><span class="meta">a code is a snapshot: swap new ones to update</span></div>
+    <div class="coopbar">
+      <button class="btn primary" data-coop="copy">Copy my code</button>
+      <span class="coopmsg" id="coopCopyMsg"></span>
     </div>
-    <div class="card">
-      <h2>Deaths per area</h2>
-      <p class="cap">Deaths recorded while the tool was running</p>
-      <div id="areaDeaths"></div>
+    <textarea id="coopIn" rows="2" placeholder="Paste your partner's code (WASD-…)" spellcheck="false" aria-label="Partner's code"></textarea>
+    <div class="coopbar">
+      <button class="btn" data-coop="paste" title="Paste from the clipboard into the box">Paste</button>
+      <button class="btn" data-coop="load">Load</button>
+      <button class="btn" data-coop="clear">Clear partner</button>
+      <span class="coopmsg" id="coopMsg"></span>
     </div>
+    <p class="coopstate" id="coopState"></p>
   </section>
 
-  <section class="card">
-    <div class="row">
-      <h2>Area map</h2>
-      <select id="mapArea" aria-label="Area"></select>
-    </div>
-    <p class="cap">Everywhere you've walked with the tool running, coloured by height, with deaths and bonfire rests</p>
-    <div id="areaMap"></div>
-  </section>
+  <div id="solo" style="display:flex;flex-direction:column;gap:18px">
+    <section class="panel" id="played" hidden><div id="playedBody"></div></section>
 
-  <section class="card">
-    <h2>Level over the playthrough</h2>
-    <p class="cap">Soul level against the game's own play-time clock (hours)</p>
-    <div id="levelLine"></div>
-  </section>
+  <div id="compare" hidden>
+    <section class="panel">
+      <div class="ph"><span class="pt">Right now</span><span class="rule"></span><span class="meta">from the game and your partner's code</span></div>
+      <div class="players" id="cmpPlayers"></div>
+      <p class="cap" id="cmpNote" hidden></p>
+      <div id="cmpNotes"></div>
+      <div class="legend"><span><i class="a"></i>You</span><span><i class="b"></i>Your partner</span></div>
+    </section>
+    <section class="pair2">
+      <div class="panel">
+        <div class="ph"><span class="pt">Progress</span><span class="rule"></span><span class="meta">out of the game's total, where there is one</span></div>
+        <div id="cmpProgress"></div>
+      </div>
+      <div class="panel">
+        <div class="ph"><span class="pt">Character</span><span class="rule"></span><span class="meta">soul level, attributes, max HP, FP and stamina</span></div>
+        <div id="cmpCharacter" class="stack"></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="ph"><span class="pt">Key items</span><span class="rule"></span><span class="meta">ringed: still held</span></div>
+      <div id="cmpKeys"></div>
+    </section>
+  </div>
 
-  <section class="card">
-    <div class="row">
-      <h2>Tool performance</h2>
-      <select id="perfSession" aria-label="Session"></select>
-    </div>
-    <p class="cap">The guide's own cost while it ran, one point per 5-second window (Milestone 5 stress test)</p>
-    <p class="perfsum" id="perfSummary"></p>
-    <div class="perfgrid" id="perfCharts"></div>
-  </section>
+    <section class="tiles" id="tiles"></section>
 
-  <section class="card">
-    <h2>Sessions</h2>
-    <p class="cap">One row per recorded session, newest first</p>
-    <div class="tablewrap"><table id="sessions"></table></div>
-  </section>
+    <section class="mapp" id="mapPanel">
+      <div class="mlist">
+        <div class="ph"><span class="pt">Area map</span><span class="rule"></span></div>
+        <div class="mitems" id="mapAreas"></div>
+      </div>
+      <div class="mcanvas" id="mapHost"></div>
+    </section>
+    <p class="note" id="partnerMapNote" hidden>Your map only: your partner's trail needs the live link.</p>
 
-  <footer>Generated by WASD __APP_VERSION__ from saved sessions. Read-only companion for Dark Souls III (Seamless Co-op).</footer>
+    <section class="pair2">
+      <div class="panel">
+        <div class="ph"><span class="pt">Time per area</span><span class="rule"></span><span class="meta">in order first visited</span></div>
+        <div id="areaTime"></div>
+      </div>
+      <div class="panel">
+        <div class="ph"><span class="pt">Deaths per area</span><span class="rule"></span><span class="meta" id="deathsMeta"></span></div>
+        <div id="areaDeaths"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span class="pt">Bosses · attempts and kills</span><span class="rule"></span><span class="meta" id="bossMeta"></span></div>
+      <div id="bosses"></div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span class="pt">Firsts and records</span><span class="rule"></span><span class="meta" id="recordsMeta"></span></div>
+      <div id="records"></div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span class="pt">Soul level over the playthrough</span><span class="rule"></span><span class="meta" id="levelMeta"></span></div>
+      <div id="levelChart"></div>
+      <div class="note" id="levelNote">◇ marks a boss kill. Horizontal axis: recorded play time, in hours.</div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span class="pt" id="timelineTitle">Areas visited across the playthrough</span><span class="rule"></span><span class="meta" id="timelineMeta"></span></div>
+      <div id="timeline"></div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span class="pt">Gear history</span><span class="rule"></span><span class="meta">equipped weapons across recorded play</span></div>
+      <div id="gear"></div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span class="pt">When you play</span><span class="rule"></span><span class="meta" id="heatMeta">minutes played by weekday and hour</span></div>
+      <div id="heat"></div>
+    </section>
+
+    <section class="panel" id="whoFoundPanel" hidden>
+      <div class="ph"><span class="pt">Who found what · item pickups</span><span class="rule"></span></div>
+      <div id="whoFound"></div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span class="pt">Compare two sessions</span><span class="rule"></span></div>
+      <div id="compareSessions"></div>
+    </section>
+
+    <section class="panel">
+      <div class="ph"><span class="pt">Sessions</span><span class="rule"></span><span class="meta">newest first</span></div>
+      <div class="stwrap"><div class="st" id="sessions"></div></div>
+    </section>
+
+    <section class="perf" id="perf">
+      <button class="u" id="perfToggle" aria-expanded="false"><span class="ar">▸</span><span class="lb">Tool performance</span><span class="vd" id="perfVerdict"></span><span class="dg">diagnostic</span></button>
+      <div class="perfbody" id="perfBody" hidden></div>
+    </section>
+  </div>
+
+  <footer><span>Generated by WASD __APP_VERSION__ from saved sessions</span><span class="sp"></span><span>Shows only what has already happened. Read-only companion for Dark Souls III (Seamless Co-op).</span></footer>
 </main>
 <div id="tip"></div>
 
 <script>
 // [{file, events: [...]}, ...]; the player is the start event's character name.
-const SESSIONS = __SESSIONS_JSON__;
-for (const s of SESSIONS) s.character = (s.events.find(e => e.type === "start") || {}).character || "Unknown";
+// Replaced as you play when WASD serves the page (setupLive).
+let SESSIONS = __SESSIONS_JSON__;
+tagCharacters(SESSIONS);
+function tagCharacters(list) {
+  for (const s of list) s.character = (s.events.find(e => e.type === "start") || {}).character || "Unknown";
+  return list;
+}
+// The characters with recorded sessions, most sessions first (usually the
+// one you're playing).
+function charactersOf(list) {
+  const counts = new Map();
+  for (const s of list) counts.set(s.character, (counts.get(s.character) || 0) + 1);
+  return [...counts.keys()].sort((a, b) => counts.get(b) - counts.get(a));
+}
+// What the page shows of the sessions, to tell whether new ones change it:
+// each file with its event and perf row counts. Sessions only grow.
+function sessionsKey(list) {
+  return list.map(s => `${s.file}:${s.events.length}:${(s.perf || []).length}`).join("|");
+}
+
+// When a session started (local time): its start event's startedAt, else
+// the log's file name (YYYYMMDD-HHMMSS.jsonl); the epoch if neither.
+function sessionStart(s) {
+  const st = (s.events.find(e => e.type === "start") || {}).startedAt;
+  if (st) { const d = new Date(st); if (!isNaN(d)) return d; }
+  const m = /(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(s.file || "");
+  return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : new Date(0);
+}
 
 // ---------- aggregation ----------
-function summarise(sessions) {
+// One character's sessions, summed. `sessions` (oldest first, numbered S1
+// up) and `rows` (the same, newest first) carry each session's figures;
+// the maps are per area; `areaOrder` is the order areas were first visited.
+function summarise(input) {
   const areaTime = new Map(), areaDeaths = new Map(), deathsByArea = new Map();
   const trailsByArea = new Map(), bonfiresByArea = new Map();
   const listFor = (m, k) => { if (!m.has(k)) m.set(k, []); return m.get(k); };
-  const level = [], rows = [];
+  const level = [], levelRec = [], sessions = [], areaOrder = [];
   let seconds = 0, deaths = 0, lost = 0, recovered = 0, gained = 0, deathsTotal = 0, lastPlay = 0;
-  for (const s of sessions) {
+  const ordered = input.map(s => ({ s, start: sessionStart(s) })).sort((a, b) => a.start - b.start);
+  for (const { s, start: startDate } of ordered) {
     const ev = s.events;
     const start = ev.find(e => e.type === "start") || {};
     const end = ev.find(e => e.type === "end");
     const lastT = ev.length ? ev[ev.length - 1].t : 0;
     const dur = end ? end.seconds : lastT;
-    seconds += dur;
     let sDeaths = 0, sGained = end ? end.gained : 0;
-    const areasSeen = [];
+    const areasSeen = [], segs = [];
     const enters = ev.filter(e => e.type === "enter");
     enters.forEach((e, i) => {
       const until = i + 1 < enters.length ? enters[i + 1].t : dur;
-      areaTime.set(e.area, (areaTime.get(e.area) || 0) + Math.max(0, until - e.t));
+      const sec = Math.max(0, until - e.t);
+      areaTime.set(e.area, (areaTime.get(e.area) || 0) + sec);
       if (!areasSeen.includes(e.area)) areasSeen.push(e.area);
+      if (!areaOrder.includes(e.area)) areaOrder.push(e.area);
+      if (segs.length && segs[segs.length - 1].area === e.area) segs[segs.length - 1].sec += sec;
+      else if (sec > 0) segs.push({ area: e.area, sec });
     });
     // Trail: pos events belong to the area of the latest enter; a new run
     // starts on an area change or a jump (warp, respawn: > 25 units or 10s).
@@ -256,6 +660,16 @@ function summarise(sessions) {
         listFor(bonfiresByArea, run ? runArea : curArea).push(e);
       }
     }
+    // Soul level against recorded time: this session's levels, after every
+    // earlier session's length.
+    const offset = seconds / 3600;
+    // Boss kills, deaths (with the boss they were near, if any) and the
+    // weapon in each hand, at session time t.
+    const kills = ev.filter(e => e.type === "boss").map(e => ({ flag: e.flag, name: e.name || "A boss", area: e.area || "", t: e.t }));
+    const deathEvents = ev.filter(e => e.type === "death").map(e => ({ t: e.t, area: e.area || "", boss: e.boss || 0, bossName: e.bossName || "" }));
+    const gear = ev.filter(e => e.type === "gear").map(e => ({ slot: e.slot, id: e.id, name: e.name || "?", upgrade: e.upgrade || 0, t: e.t }));
+    let levelStart = start.level, levelEnd = start.level;
+    if (start.level) levelRec.push({ h: offset, level: start.level });
     for (const e of ev) {
       if (e.type === "death") {
         sDeaths++;
@@ -270,19 +684,27 @@ function summarise(sessions) {
         level.push({ h: e.playTimeMs / 3600000, level: e.level });
         if (e.playTimeMs > lastPlay) { lastPlay = e.playTimeMs; deathsTotal = e.deathsTotal; }
       }
+      if ((e.type === "sample" || e.type === "end") && e.level) {
+        if (levelStart == null) levelStart = e.level;
+        levelEnd = e.level;
+        levelRec.push({ h: offset + e.t / 3600, level: e.level });
+      }
     }
     if (end && end.playTimeMs >= lastPlay) { lastPlay = end.playTimeMs; deathsTotal = end.deathsTotal; }
+    seconds += dur;
     deaths += sDeaths;
     gained += sGained;
-    rows.push({
-      startedAt: start.startedAt || s.file, dur, deaths: sDeaths,
+    sessions.push({
+      n: sessions.length + 1, start: startDate, startedAt: start.startedAt || s.file, dur, deaths: sDeaths, gained: sGained,
       perHour: dur >= 60 ? sGained / (dur / 3600) : null,
-      level: end ? end.level : start.level, areas: areasSeen
+      level: end ? end.level : start.level, levelStart: levelStart ?? 0, levelEnd: levelEnd ?? 0,
+      areas: areasSeen, segs, perf: s.perf || null, offset: offset * 3600, kills, deathEvents, gear,
     });
   }
   level.sort((a, b) => a.h - b.h);
-  rows.sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
-  return { areaTime, areaDeaths, deathsByArea, trailsByArea, bonfiresByArea, level, rows, seconds, deaths, lost, recovered, gained, deathsTotal, lastPlay };
+  const rows = [...sessions].reverse();
+  return { areaTime, areaDeaths, deathsByArea, trailsByArea, bonfiresByArea, level, levelRec, sessions, rows, areaOrder,
+           seconds, deaths, lost, recovered, gained, deathsTotal, lastPlay };
 }
 
 // ---------- formatting ----------
@@ -292,11 +714,317 @@ function fmtDur(sec) {
   const h = Math.floor(sec / 3600), m = Math.floor(sec / 60) % 60, s = sec % 60;
   return h ? `${h}h ${String(m).padStart(2, "0")}m` : `${m}m ${String(s).padStart(2, "0")}s`;
 }
-function fmtWhen(iso) {
-  const d = new Date(iso);
-  return isNaN(d) ? iso : d.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+const pad2 = n => String(n).padStart(2, "0");
+// "27 h 48 m", "48 m", "45 s".
+function fmtHM(sec) {
+  sec = Math.round(sec);
+  if (sec < 60) return `${sec} s`;
+  const m = Math.round(sec / 60);
+  return m < 60 ? `${m} m` : `${Math.floor(m / 60)} h ${pad2(m % 60)} m`;
 }
+const fmtClock = sec => { const m = Math.round(sec / 60); return `${Math.floor(m / 60)}:${pad2(m % 60)}`; };  // "1:52"
+const fmtDate = d => d.getTime() ? d.toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "–";
+const fmtDow = d => d.getTime() ? d.toLocaleDateString(undefined, { weekday: "short" }) : "";
+const fmtTime = d => d.getTime() ? `${pad2(d.getHours())}:${pad2(d.getMinutes())}` : "–";
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const pct = f => `${(Math.max(0, Math.min(1, f)) * 100).toFixed(2)}%`;
+
+// One colour per area (oklch(0.58 0.075 hue)), the same in every report.
+const AREA_HUES = {
+  "Cemetery of Ash": 70, "Firelink Shrine": 40, "High Wall of Lothric": 95, "Undead Settlement": 125, "Road of Sacrifices": 150,
+  "Cathedral of the Deep": 255, "Farron Keep": 175, "Catacombs of Carthus": 25, "Smouldering Lake": 350,
+  "Irithyll of the Boreal Valley": 215, "Irithyll Dungeon": 295, "Profaned Capital": 10, "Anor Londo": 235, "Lothric Castle": 85,
+  "Consumed King's Garden": 160, "Grand Archives": 50, "Untended Graves": 275, "Archdragon Peak": 195,
+  "Kiln of the First Flame": 30, "Painted World of Ariandel": 230, "The Dreg Heap": 60, "The Ringed City": 310,
+};
+function areaColor(area) {
+  let h = AREA_HUES[area];
+  if (h == null) { h = 0; for (const c of String(area)) h = (h * 31 + c.charCodeAt(0)) % 360; }
+  return `oklch(0.58 0.075 ${h})`;
+}
+
+// ---------- section models (pure; tested in tests/js) ----------
+function tilesModel(S) {
+  const hours = S.seconds / 3600;
+  const long = S.sessions.reduce((a, s) => (!a || s.dur > a.dur ? s : a), null);
+  const deadliest = [...S.areaDeaths.entries()].sort((a, b) => b[1] - a[1])[0];
+  const perHour = v => fmtInt(Math.round(v / hours / 10) * 10);
+  return [
+    { k: "Time recorded", v: fmtHM(S.seconds), s: S.lastPlay ? `of ${fmtHM(S.lastPlay / 1000)} in game` : "" },
+    { k: "Deaths", v: fmtInt(S.deaths), s: `${fmtInt(S.deathsTotal)} across the playthrough` },
+    { k: "Deaths per hour", v: S.seconds >= 60 ? (S.deaths / hours).toFixed(1) : "–", s: "recorded time" },
+    { k: "Souls lost", v: fmtInt(S.lost), s: `${fmtInt(S.recovered)} recovered` + (S.lost ? ` (${Math.round(S.recovered / S.lost * 100)}%)` : "") },
+    { k: "Souls gained", v: fmtInt(S.gained), s: S.seconds >= 60 ? `${perHour(S.gained)} per hour` : "per hour after a minute" },
+    { k: "Longest session", v: long ? fmtClock(long.dur) : "–", s: long ? [`S${long.n}`, fmtDate(long.start), long.areas[0]].filter(Boolean).join(" · ") : "" },
+    { k: "Deadliest area", v: deadliest ? deadliest[0] : "None yet", s: deadliest ? `${deadliest[1]} death${deadliest[1] === 1 ? "" : "s"} there` : "", text: true },
+  ];
+}
+
+// Time and deaths per area, both in the order first visited (so the two
+// lists line up); deaths somewhere no `enter` named go last.
+function areaBars(S) {
+  const time = S.areaOrder.map(a => ({ name: a, v: S.areaTime.get(a) || 0 }));
+  const deaths = S.areaOrder.map(a => ({ name: a, v: S.areaDeaths.get(a) || 0 }));
+  for (const [a, n] of S.areaDeaths) if (!S.areaOrder.includes(a)) deaths.push({ name: a, v: n });
+  const scale = rows => { const max = Math.max(1, ...rows.map(r => r.v)); return rows.map(r => ({ ...r, w: r.v / max })); };
+  return {
+    time: scale(time).map(r => ({ ...r, label: fmtHM(r.v) })),
+    deaths: scale(deaths).map(r => ({ ...r, label: String(r.v) })),
+  };
+}
+
+// The areas the map can draw, in the order first visited, with what's there.
+function mapAreasModel(S) {
+  const names = [...new Set([...S.areaOrder, ...S.trailsByArea.keys(), ...S.deathsByArea.keys(), ...S.bonfiresByArea.keys()])];
+  return names.filter(a => S.trailsByArea.has(a) || S.deathsByArea.has(a) || S.bonfiresByArea.has(a)).map(a => {
+    const d = (S.deathsByArea.get(a) || []).length, r = (S.bonfiresByArea.get(a) || []).length, t = S.areaTime.get(a) || 0;
+    return { name: a, time: t, deaths: d, rests: r, sub: `${fmtHM(t)} · ${d} death${d === 1 ? "" : "s"}` };
+  });
+}
+
+// Every boss you've fought: kills (in kill order) and attempts (deaths near
+// an undefeated boss), across all sessions, on recorded time. A boss you've
+// died near but not killed is named only at Full: being near its place
+// doesn't mean you've seen it.
+function bossModel(S, tier) {
+  const byFlag = new Map();
+  const get = (flag, name, area) => {
+    if (!byFlag.has(flag)) byFlag.set(flag, { flag, name, area, attempts: [], kill: null });
+    return byFlag.get(flag);
+  };
+  for (const s of S.sessions) {
+    for (const d of s.deathEvents) if (d.boss) get(d.boss, d.bossName, d.area).attempts.push({ at: s.offset + d.t, n: s.n });
+    for (const k of s.kills) { const b = get(k.flag, k.name, k.area); b.name = k.name; b.area = k.area || b.area; if (!b.kill) b.kill = { at: s.offset + k.t, n: k.n || s.n, start: s.start }; }
+  }
+  const all = [...byFlag.values()];
+  const killed = all.filter(b => b.kill).sort((a, b) => a.kill.at - b.kill.at);
+  const open = all.filter(b => !b.kill).sort((a, b) => a.attempts[0].at - b.attempts[0].at);
+  const row = b => {
+    const before = b.kill ? b.attempts.filter(a => a.at <= b.kill.at) : b.attempts;
+    const sess = S.sessions.find(x => x.n === (b.kill ? b.kill.n : before[before.length - 1].n));
+    return {
+      name: b.kill || tier >= 3 ? b.name : `A boss in ${b.area || "an area you've been to"}`,
+      area: b.area, killed: !!b.kill, deaths: before.length,
+      ttk: b.kill && before.length ? b.kill.at - before[0].at : null,
+      session: sess ? `S${sess.n} · ${fmtDate(sess.start)}` : "",
+    };
+  };
+  const rows = [...killed.map(row), ...open.map(row)];
+  const atBosses = rows.reduce((a, r) => a + r.deaths, 0);
+  return { rows, meta: `${killed.length} boss${killed.length === 1 ? "" : "es"} killed · ${atBosses} death${atBosses === 1 ? "" : "s"} at bosses` };
+}
+
+// Firsts and records: eight cards, each a value and a line under it.
+function recordsModel(S, bosses) {
+  const killed = bosses.rows.filter(r => r.killed);
+  // score: higher is better (for "ahead" in pair mode); null: no better.
+  const card = (k, v, d, score = null) => ({ k, v, d, score });
+  const cards = [];
+  const firstTry = killed.filter(r => !r.deaths);
+  if (firstTry.length) cards.push(card("First-try kills", `${firstTry.length} boss${firstTry.length === 1 ? "" : "es"}`, firstTry.map(r => r.name).join(", "), firstTry.length));
+  else if (killed.length) {
+    const c = killed.reduce((a, r) => (r.deaths < a.deaths ? r : a));
+    cards.push(card("First-try kills", "None yet", `Closest: ${c.name}, ${c.deaths} death${c.deaths === 1 ? "" : "s"}`, 0));
+  } else cards.push(card("First-try kills", "None yet", "No boss kills recorded yet"));
+  const timed = killed.filter(r => r.ttk != null);
+  const fast = timed.length ? timed.reduce((a, r) => (r.ttk < a.ttk ? r : a)) : null;
+  cards.push(fast ? card("Fastest boss kill", fmtHM(fast.ttk), `${fast.name} · first try to kill · ${fast.session}`, -fast.ttk) : card("Fastest boss kill", "–", "Needs a kill after a death"));
+  const tough = killed.length ? killed.reduce((a, r) => (r.deaths > a.deaths ? r : a)) : null;
+  cards.push(tough ? card("Toughest boss", `${tough.deaths} death${tough.deaths === 1 ? "" : "s"}`,
+    tough.ttk != null ? `${tough.name} · ${fmtHM(tough.ttk)} from first try to kill` : tough.name) : card("Toughest boss", "–", "No boss kills recorded yet"));
+  // Longest life: the longest stretch of a session without a death. A
+  // partner's comes worked out, in their code (S.marks).
+  let life = S.marks && S.marks.life ? { sec: S.marks.life.sec, area: S.marks.life.area, n: S.marks.life.n } : null;
+  for (const s of S.marks ? [] : S.sessions) {
+    let from = 0, area = s.areas[0] || "";
+    for (const d of [...s.deathEvents, { t: s.dur, area: "" }]) {
+      if (!life || d.t - from > life.sec) life = { sec: d.t - from, area: d.area || area, n: s.n };
+      from = d.t;
+      if (d.area) area = d.area;
+    }
+  }
+  cards.push(life && life.sec > 0 ? card("Longest life", fmtHM(life.sec), [life.area, life.n ? `S${life.n}` : ""].filter(Boolean).join(" · "), life.sec) : card("Longest life", "–", "Nothing recorded yet"));
+  const hourLong = S.sessions.filter(s => s.dur >= 3600);
+  const clean = hourLong.length ? hourLong.reduce((a, s) => (s.deaths / s.dur < a.deaths / a.dur ? s : a)) : null;
+  cards.push(clean ? card("Cleanest session", `${(clean.deaths / (clean.dur / 3600)).toFixed(1)} deaths / h`, `S${clean.n} · ${fmtDate(clean.start)} · ${clean.areas[0] || ""}`, -clean.deaths / clean.dur)
+    : card("Cleanest session", "–", "Needs a session of 1 h or more"));
+  const lv = S.sessions.length ? S.sessions.reduce((a, s) => (s.levelEnd - s.levelStart > a.levelEnd - a.levelStart ? s : a)) : null;
+  cards.push(lv ? card("Best levelling session", `+${lv.levelEnd - lv.levelStart} level${lv.levelEnd - lv.levelStart === 1 ? "" : "s"}`, `S${lv.n} · SL ${lv.levelStart} → ${lv.levelEnd}`, lv.levelEnd - lv.levelStart) : card("Best levelling session", "–", ""));
+  const rich = S.sessions.length ? S.sessions.reduce((a, s) => (s.gained > a.gained ? s : a)) : null;
+  cards.push(rich ? card("Most souls in a session", fmtInt(rich.gained), [`S${rich.n}`, fmtClock(rich.dur), rich.areas[0]].filter(Boolean).join(" · "), rich.gained) : card("Most souls in a session", "–", ""));
+  let first = S.marks && S.marks.firstDeath ? { at: S.marks.firstDeath.sec, area: S.marks.firstDeath.area, n: S.marks.firstDeath.n } : null;
+  for (const s of S.marks ? [] : S.sessions) if (!first && s.deathEvents.length) first = { at: s.offset + s.deathEvents[0].t, area: s.deathEvents[0].area, n: s.n };
+  cards.push(first ? card("First death", `${fmtHM(first.at)} in`, [first.n ? `S${first.n}` : "", first.area].filter(Boolean).join(" · ")) : card("First death", "None yet", "No deaths recorded"));
+  return cards;
+}
+
+// Gear history: the weapon in each hand across recorded time. Blocks of one
+// weapon run until the next change or the session's end; the same weapon
+// across a session break joins up. Weapons alternate two warm shades; an
+// upgraded one is a lighter shade of the same weapon.
+function gearModel(S) {
+  const total = S.seconds;
+  if (!total || !S.sessions.some(s => s.gear.length)) return null;
+  const rows = [["Main hand", "R"], ["Off hand", "L"]].map(([label, slot]) => {
+    const blocks = [];
+    for (const s of S.sessions) {
+      const ev = s.gear.filter(g => g.slot === slot).sort((a, b) => a.t - b.t);
+      ev.forEach((g, i) => {
+        const from = s.offset + g.t, to = s.offset + (i + 1 < ev.length ? ev[i + 1].t : s.dur);
+        const last = blocks[blocks.length - 1];
+        if (last && last.id === g.id && Math.abs(last.to - from) < 1) { last.to = to; last.n1 = s.n; return; }
+        if (to > from) blocks.push({ id: g.id, name: g.name, upgrade: g.upgrade, from, to, n0: s.n, n1: s.n });
+      });
+    }
+    let fam = -1, prev = "";
+    return {
+      label, blocks: blocks.map(b => {
+        if (b.name !== prev) { fam++; prev = b.name; }
+        const up = b.upgrade > 0, text = `${b.name}${up ? ` +${b.upgrade}` : ""}`;
+        return {
+          left: b.from / total, w: (b.to - b.from) / total, label: text,
+          color: `oklch(${(0.30 + (fam % 2) * 0.07 + (up ? 0.06 : 0)).toFixed(2)} 0.045 ${fam % 2 ? 45 : 65})`,
+          title: `${text} · ${b.n0 === b.n1 ? `S${b.n0}` : `S${b.n0}–S${b.n1}`} · ${fmtClock(b.to - b.from)}`,
+        };
+      }),
+    };
+  });
+  return { rows, ticks: S.sessions.map(s => ({ left: s.offset / total, label: `S${s.n}` })) };
+}
+
+// Soul level against recorded hours (or, `clock` "game", the game's own
+// play-time clock: a partner's levels come that way): the line, its range
+// and axis ticks.
+function levelModel(S, clock = "recorded") {
+  const pts = clock === "game" ? S.level : S.levelRec;
+  if (pts.length < 2) return null;
+  const lv = pts.map(p => p.level);
+  const lo = Math.min(...lv), hi = Math.max(...lv);
+  const step = hi - lo > 40 ? 20 : hi - lo > 12 ? 10 : 2;
+  const y0 = Math.max(0, Math.floor((lo - step / 2) / step) * step), y1 = Math.ceil((hi + step / 2) / step) * step;
+  const x1 = Math.max(pts[pts.length - 1].h, 1 / 60);
+  const xStep = [0.25, 0.5, 1, 2, 5, 10, 20, 50].find(s => x1 / s <= 6) || 100;
+  const yTicks = [];
+  for (let v = y0; v <= y1; v += step) yTicks.push(v);
+  const xTicks = [];
+  for (let h = 0; h <= x1 + 1e-9; h += xStep) xTicks.push(h);
+  // Boss kills on the line: at the kill's time, at the level then.
+  const kills = [];
+  for (const s of clock === "game" ? [] : S.sessions) for (const k of s.kills) {
+    const h = (s.offset + k.t) / 3600;
+    const at = pts.filter(p => p.h <= h + 1e-9).pop() || pts[0];
+    kills.push({ h, level: at.level, name: k.name, n: s.n });
+  }
+  return { pts, x1, y0, y1, yTicks, xTicks, kills, first: pts[0].level, last: pts[pts.length - 1].level };
+}
+
+// The recorded time as one track: each session's stretches per area, in
+// order, as shares of the whole; a tick at each session's start.
+function timelineModel(S) {
+  const total = S.sessions.reduce((a, s) => a + s.segs.reduce((b, g) => b + g.sec, 0), 0);
+  const segs = [], ticks = [], byArea = new Map();
+  let at = 0;
+  for (const s of S.sessions) {
+    if (!s.segs.length) continue;
+    ticks.push({ left: total ? at / total : 0, label: `S${s.n}` });
+    s.segs.forEach((g, j) => {
+      segs.push({ left: at / total, w: g.sec / total, area: g.area, color: areaColor(g.area), first: j === 0,
+                  title: `${g.area} · S${s.n} · ${fmtHM(g.sec)}` });
+      at += g.sec;
+      byArea.set(g.area, (byArea.get(g.area) || 0) + g.sec);
+    });
+  }
+  const legend = [...byArea].map(([area, sec]) => ({ area, color: areaColor(area), time: fmtHM(sec) }));
+  return total ? { total, segs, ticks, legend } : null;
+}
+
+// Minutes played per weekday (Monday first) and hour, from each session's
+// start and length, plus a one-line summary.
+function heatModel(S) {
+  const DOW = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const starts = [], ends = [];
+  for (const s of S.sessions) {
+    if (!s.start.getTime() || s.dur <= 0) continue;
+    let t = s.start.getTime(), left = s.dur / 60;
+    starts.push(s.start.getHours() * 60 + s.start.getMinutes());
+    ends.push(s.start.getHours() * 60 + s.start.getMinutes() + left);
+    while (left > 1e-6) {
+      const d = new Date(t), into = d.getMinutes() + d.getSeconds() / 60 + d.getMilliseconds() / 60000;
+      const take = Math.min(left, 60 - into);
+      grid[(d.getDay() + 6) % 7][d.getHours()] += take;
+      t += take * 60000;
+      left -= take;
+    }
+  }
+  const all = grid.flat().reduce((a, b) => a + b, 0);
+  if (!all) return null;
+  let peak = [0, 0];
+  grid.forEach((row, d) => row.forEach((v, h) => { if (v > grid[peak[0]][peak[1]]) peak = [d, h]; }));
+  const clock = m => `${pad2(Math.floor(m / 60) % 24)}:${pad2(Math.floor(m % 60))}`;
+  starts.sort((a, b) => a - b);
+  const weekend = grid.slice(5).flat().reduce((a, b) => a + b, 0);
+  return {
+    days: DOW, grid, max: Math.max(...grid.flat()),
+    sum: `Most often ${DOW[peak[0]]} ${pad2(peak[1])}:00 · typical start ${clock(starts[Math.floor(starts.length / 2)])}` +
+         ` · latest finish ${clock(Math.max(...ends))} · ${Math.round(weekend / all * 100)}% at weekends`,
+  };
+}
+
+// Session B against session A, row by row; deltas coloured good or bad
+// (fewer deaths is better).
+function compareModel(sessions, na, nb) {
+  const a = sessions.find(s => s.n === na), b = sessions.find(s => s.n === nb);
+  if (!a || !b) return null;
+  const dph = s => (s.dur >= 60 ? s.deaths / (s.dur / 3600) : 0);
+  const delta = (x, y, f, lowGood) => {
+    const d = y - x;
+    if (Math.abs(d) < 1e-9) return { d: "±0", tone: "" };
+    return { d: (d > 0 ? "+" : "−") + f(Math.abs(d)), tone: (lowGood ? d < 0 : d > 0) ? "good" : "bad" };
+  };
+  return [
+    ["Date", s => `${fmtDow(s.start)} ${fmtDate(s.start)}, ${fmtTime(s.start)}`],
+    ["Areas", s => s.areas.join(", ") || "–"],
+    ["Length", s => fmtHM(s.dur), s => s.dur, fmtHM, false],
+    ["Deaths", s => String(s.deaths), s => s.deaths, String, true],
+    ["Deaths per hour", s => dph(s).toFixed(1), dph, v => v.toFixed(1), true],
+    ["Souls gained", s => fmtInt(s.gained), s => s.gained, fmtInt, false],
+    ["Levels gained", s => `SL ${s.levelStart} → ${s.levelEnd}`, s => s.levelEnd - s.levelStart, String, false],
+    ["Bosses killed", s => s.kills.map(k => k.name).join(", ") || "–", s => s.kills.length, String, false],
+  ].map(([k, f, val, fmt, low]) => ({ k, a: f(a), b: f(b), ...(val ? delta(val(a), val(b), fmt, low) : { d: "", tone: "" }) }));
+}
+
+// The sessions table, newest first.
+function sessionRowsModel(S) {
+  return S.rows.map(s => ({
+    n: `S${s.n}`, date: `${fmtDow(s.start)} ${fmtDate(s.start)}`, start: fmtTime(s.start), length: fmtClock(s.dur),
+    areas: s.areas.join(" → ") || "–", deaths: String(s.deaths), souls: fmtInt(s.gained),
+    level: s.levelStart && s.levelEnd ? `${s.levelStart} → ${s.levelEnd}` : "–",
+    bosses: s.kills.map(k => k.name).join(", "),
+  }));
+}
+
+// Tool performance, one figure per session that saved perf rows
+// ([time, session_t, window_s, ticks, rate_hz, lat_avg_us, lat_max_us,
+// cpu_pct_core, working_set_mb, private_mb]), and the one-line verdict.
+function perfModel(S) {
+  const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const rows = S.sessions.filter(s => s.perf && s.perf.length).map(s => ({
+    n: s.n, hz: avg(s.perf.map(r => r[4])), lat: avg(s.perf.map(r => r[5])), worst: Math.max(...s.perf.map(r => r[6])),
+    cpu: avg(s.perf.map(r => r[7])), mem: Math.max(...s.perf.map(r => r[8])),
+  }));
+  if (!rows.length) return { rows, verdict: "No perf figures yet: sessions recorded from now on save them." };
+  const minHz = Math.min(...rows.map(r => r.hz)), held = rows.filter(r => r.hz >= 9.9).length;
+  const worst = rows.reduce((a, r) => (r.worst > a.worst ? r : a));
+  const cpu = Math.max(...rows.map(r => r.cpu)), mem = Math.max(...rows.map(r => r.mem));
+  const healthy = minHz >= 9.5 && cpu < 5;
+  return {
+    rows,
+    verdict: `${healthy ? "Healthy." : "Worth a look."} Held 10 Hz in ${held} of ${rows.length} session${rows.length === 1 ? "" : "s"}` +
+      ` (lowest ${minHz.toFixed(1)}); reads average ${avg(rows.map(r => r.lat)).toFixed(1)} µs, worst ${Math.round(worst.worst)} µs (S${worst.n});` +
+      ` CPU ≤ ${cpu.toFixed(1)}%, memory ≤ ${mem.toFixed(1)} MB.`,
+  };
+}
 
 // ---------- tooltip ----------
 const tip = document.getElementById("tip");
@@ -318,205 +1046,180 @@ function el(name, attrs, parent) {
   if (parent) parent.appendChild(n);
   return n;
 }
+// Tooltips on plain DOM: elements with data-tip show it on hover (as
+// text); data-tip-html, markup the page made itself (escaped where built).
+const tipOf = e => {
+  const t = e.target.closest && e.target.closest("[data-tip], [data-tip-html]");
+  return t ? (t.dataset.tipHtml != null ? t.dataset.tipHtml : esc(t.dataset.tip)) : null;
+};
+document.addEventListener("mouseover", e => { const h = tipOf(e); if (h != null) showTip(h, e.clientX, e.clientY); });
+document.addEventListener("mousemove", e => { const h = tipOf(e); if (h != null) showTip(h, e.clientX, e.clientY); });
+document.addEventListener("mouseout", e => { if (tipOf(e) != null) hideTip(); });
 
-// ---------- charts ----------
-// Horizontal bars, one series, sorted descending; 4px rounded data end.
-function hbar(container, rows, color, fmt, unit) {
-  container.innerHTML = "";
-  if (!rows.length) { container.innerHTML = '<div class="empty">Nothing recorded yet</div>'; return; }
-  const W = 480, labelW = 170, valueW = 64, barH = 18, gap = 10, top = 4;
-  const H = top + rows.length * (barH + gap);
-  const max = Math.max(...rows.map(r => r.value)) || 1;
-  const plotW = W - labelW - valueW;
-  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": unit }, container);
-  el("line", { x1: labelW, x2: labelW, y1: 0, y2: H - gap / 2, stroke: "var(--axis)", "stroke-width": 1 }, svg);
-  rows.forEach((r, i) => {
-    const y = top + i * (barH + gap), w = Math.max(2, (r.value / max) * plotW);
-    const label = el("text", { x: labelW - 8, y: y + barH / 2 + 4.5, "text-anchor": "end", "font-size": 12.5, fill: "var(--text-secondary)" }, svg);
-    label.textContent = r.label.length > 26 ? r.label.slice(0, 25) + "…" : r.label;
-    const r4 = Math.min(4, w / 2);
-    el("path", { d: `M${labelW},${y}h${w - r4}a${r4},${r4} 0 0 1 ${r4},${r4}v${barH - 2 * r4}a${r4},${r4} 0 0 1 -${r4},${r4}h-${w - r4}z`, fill: color }, svg);
-    const v = el("text", { x: labelW + w + 6, y: y + barH / 2 + 4.5, "font-size": 12.5, fill: "var(--text-primary)" }, svg);
-    v.textContent = fmt(r.value);
-    const hit = el("rect", { x: 0, y: y - gap / 2, width: W, height: barH + gap, fill: "transparent" }, svg);
-    hit.addEventListener("mousemove", ev => showTip(`<b>${esc(r.label)}</b><br><span class="m">${unit}:</span> ${fmt(r.value)}`, ev.clientX, ev.clientY));
-    hit.addEventListener("mouseleave", hideTip);
-  });
+// ---------- sections ----------
+function drawTiles(box, tiles) {
+  box.innerHTML = tiles.map(t => `<div class="tile"><div class="k">${esc(t.k)}</div><div class="v${t.text ? " text" : ""}">${esc(t.v)}</div>` +
+    `<div class="s">${esc(t.s)}</div></div>`).join("");
 }
 
-// Level line with a crosshair + tooltip; x = play-time hours.
-function levelLine(container, pts) {
-  container.innerHTML = "";
-  if (pts.length < 2) { container.innerHTML = '<div class="empty">Needs a couple of recorded samples (one every 30s)</div>'; return; }
-  // Drawn at the card's real width (not a fixed viewBox scaled up), so
-  // text stays 11.5px in the full-width card.
-  const W = Math.max(320, container.clientWidth || 480), H = 240, L = 40, R = 12, T = 10, B = 30;
-  const x0 = pts[0].h, x1 = pts[pts.length - 1].h;
-  const lv = pts.map(p => p.level);
-  let y0 = Math.min(...lv), y1 = Math.max(...lv);
-  if (y1 - y0 < 4) { y0 -= 2; y1 += 2; }
-  const X = h => L + (x1 > x0 ? (h - x0) / (x1 - x0) : 0.5) * (W - L - R);
-  const Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
-  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Soul level over play time" }, container);
-  // Whole-level ticks at an even step (rounded quarter-steps gave 60, 62, 63, 65).
-  const step = Math.max(1, Math.ceil((y1 - y0) / 4));
-  for (let v = Math.ceil(y0); v <= y1; v += step) {
-    const y = Y(v);
-    el("line", { x1: L, x2: W - R, y1: y, y2: y, stroke: "var(--grid)", "stroke-width": 1 }, svg);
-    const t = el("text", { x: L - 6, y: y + 4, "text-anchor": "end", "font-size": 11.5, fill: "var(--text-muted)" }, svg);
-    t.textContent = Math.round(v);
-  }
-  // Play-time ticks as "22h 54m"; repeated labels (short spans) are dropped.
-  const hm = h => `${Math.floor(h)}h ${String(Math.floor((h % 1) * 60)).padStart(2, "0")}m`;
-  let lastTick = "";
-  for (let i = 0; i <= 4; i++) {
-    const h = x0 + (i / 4) * (x1 - x0), label = hm(h);
-    if (label === lastTick) continue;
-    lastTick = label;
-    const t = el("text", { x: X(h), y: H - 10, "text-anchor": i === 0 ? "start" : i === 4 ? "end" : "middle", "font-size": 11.5, fill: "var(--text-muted)" }, svg);
-    t.textContent = label;
-  }
-  el("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: "var(--axis)", "stroke-width": 1 }, svg);
-  const d = pts.map((p, i) => `${i ? "L" : "M"}${X(p.h).toFixed(1)},${Y(p.level).toFixed(1)}`).join("");
-  el("path", { d, fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round" }, svg);
-  const cross = el("line", { y1: T, y2: H - B, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
-  const dot = el("circle", { r: 4.5, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, svg);
-  const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" }, svg);
-  hit.addEventListener("mousemove", ev => {
-    const box = svg.getBoundingClientRect();
-    const hx = x0 + ((ev.clientX - box.left) * (W / box.width) - L) / (W - L - R) * (x1 - x0);
-    let best = pts[0];
-    for (const p of pts) if (Math.abs(p.h - hx) < Math.abs(best.h - hx)) best = p;
-    cross.setAttribute("x1", X(best.h)); cross.setAttribute("x2", X(best.h)); cross.setAttribute("visibility", "visible");
-    dot.setAttribute("cx", X(best.h)); dot.setAttribute("cy", Y(best.level)); dot.setAttribute("visibility", "visible");
-    showTip(`<b>Level ${best.level}</b><br><span class="m">at ${hm(best.h)} played</span>`, ev.clientX, ev.clientY);
-  });
-  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
+function drawBars(box, rows, color, empty) {
+  if (!rows.length) { box.innerHTML = `<div class="empty">${esc(empty)}</div>`; return; }
+  box.innerHTML = rows.map(r => `<div class="brow${r.v ? "" : " zero"}"><span class="n" title="${esc(r.name)}">${esc(r.name)}</span>` +
+    `<div class="tr"><div class="fill" style="width:${pct(r.w)};background:${color}"></div></div><span class="v">${esc(r.label)}</span></div>`).join("");
 }
 
-// Tool performance (Milestone 5): small multiples, one chart per measure
-// (never two scales on one axis), x = time since the session's first perf
-// window. rows: [time, session_t, window_s, ticks, rate_hz, lat_avg_us,
-// lat_max_us, cpu_pct_core, working_set_mb, private_mb] from <stamp>.perf.csv.
-// Gaps over 15s (paused, or the game not running) break the line.
-function perfCharts(container, rows) {
-  container.innerHTML = "";
-  const pts = rows.map(r => ({ at: new Date(r[0]).getTime(), v: r })).filter(p => !Number.isNaN(p.at));
-  if (pts.length < 2) return;
-  const t0 = pts[0].at;
-  for (const p of pts) p.h = (p.at - t0) / 3600000;
-  const hm = h => { const m = Math.round(h * 60); return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`; };
+function drawLevel(box, m) {
+  if (!m) { box.innerHTML = '<div class="empty">Needs a couple of recorded samples (one every 30 s)</div>'; return; }
+  const X = h => h / m.x1, Y = v => 1 - (v - m.y0) / (m.y1 - m.y0);
+  const hm = h => `${Math.floor(h)} h ${pad2(Math.floor((h % 1) * 60))} m`;
+  const line = m.pts.map(p => `${(X(p.h) * 1000).toFixed(1)},${(Y(p.level) * 230).toFixed(1)}`).join(" ");
+  const last = m.pts[m.pts.length - 1];
+  box.innerHTML = `<div class="lvl"><div class="ya">${m.yTicks.map(v => `<span style="top:${pct(Y(v))}">${v}</span>`).join("")}</div>` +
+    `<div class="plot">${m.yTicks.map(v => `<div class="gl" style="top:${pct(Y(v))}"></div>`).join("")}` +
+    `<svg viewBox="0 0 1000 230" preserveAspectRatio="none" aria-label="Soul level over recorded play time"><polyline points="${line}" fill="none" stroke="var(--acc)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"></polyline></svg>` +
+    m.kills.map(k => `<div class="kill" data-tip="${esc(`${k.name} · S${k.n}`)}" style="left:${pct(X(k.h))};top:${pct(Y(k.level))}"></div>`).join("") +
+    `<span class="end" style="left:${pct(X(last.h))};top:${pct(Y(last.level))}">SL ${last.level}</span>` +
+    `<div class="cross" hidden></div><div class="dot" hidden></div></div>` +
+    `<div></div><div class="xa">${m.xTicks.map(h => `<span style="left:${pct(X(h))}">${+h.toFixed(2)} h</span>`).join("")}</div></div>`;
+  const plot = box.querySelector(".plot"), cross = plot.querySelector(".cross"), dot = plot.querySelector(".dot");
+  plot.addEventListener("mousemove", ev => {
+    const r = plot.getBoundingClientRect(), hx = (ev.clientX - r.left) / r.width * m.x1;
+    let best = m.pts[0];
+    for (const p of m.pts) if (Math.abs(p.h - hx) < Math.abs(best.h - hx)) best = p;
+    cross.hidden = dot.hidden = false;
+    cross.style.left = pct(X(best.h));
+    dot.style.left = pct(X(best.h));
+    dot.style.top = pct(Y(best.level));
+    showTip(`<b>SL ${best.level}</b><br><span class="m">${hm(best.h)} recorded</span>`, ev.clientX, ev.clientY);
+  });
+  plot.addEventListener("mouseleave", () => { cross.hidden = dot.hidden = true; hideTip(); });
+}
+
+function drawTimeline(box, m) {
+  if (!m) { box.innerHTML = '<div class="empty">Nothing recorded yet</div>'; return; }
+  // Session ticks: a label only where it has room (about 3% of the track).
+  let lastLeft = -1;
+  const ticks = m.ticks.filter(t => { if (t.left - lastLeft < 0.03) return false; lastLeft = t.left; return true; });
+  box.innerHTML = `<div class="tlt">${ticks.map(t => `<span style="left:${pct(t.left)}">${esc(t.label)}</span>`).join("")}</div>` +
+    `<div class="tlk">${m.segs.map(g => `<div class="${g.first ? "first" : ""}" data-tip="${esc(g.title)}" style="left:${pct(g.left)};width:${pct(g.w)};background:${g.color}"></div>`).join("")}</div>` +
+    `<div class="tll">${m.legend.map(l => `<span><i style="background:${l.color}"></i>${esc(l.area)}<em>${esc(l.time)}</em></span>`).join("")}</div>`;
+}
+
+function drawHeat(box, m) {
+  if (!m) { box.innerHTML = '<div class="empty">Nothing recorded yet</div>'; return; }
+  const hours = Array.from({ length: 24 }, (_, h) => `<span class="hl">${h % 3 === 0 ? pad2(h) : ""}</span>`).join("");
+  const rows = m.grid.map((row, d) => `<span class="dl">${m.days[d]}</span>` + row.map((v, h) => {
+    const bg = v > 0.5 ? `oklch(0.72 0.14 58 / ${(0.12 + 0.88 * v / m.max).toFixed(2)})` : "";
+    return `<div class="c" data-tip="${m.days[d]} ${pad2(h)}:00 · ${Math.round(v)} min"${bg ? ` style="background:${bg}"` : ""}></div>`;
+  }).join("")).join("");
+  box.innerHTML = `<div class="heat"><span></span>${hours}${rows}</div><div class="heatsum">${esc(m.sum)}</div>`;
+}
+
+function drawBosses(box, m) {
+  if (!m.rows.length) {
+    box.innerHTML = '<div class="empty">No boss kills or attempts recorded yet. Sessions recorded with this version on log them.</div>';
+    return;
+  }
+  const marks = r => {
+    const shown = Math.min(r.deaths, 30);
+    return `<span class="bx">${"✕".repeat(shown)}${r.deaths > shown ? `<em>+${r.deaths - shown}</em>` : ""}</span>` +
+      (r.killed ? '<span class="ok">✓</span>' : "") +
+      `<span class="bn">${r.killed ? (r.deaths ? `${r.deaths} death${r.deaths === 1 ? "" : "s"}` : "first try") : `${r.deaths} death${r.deaths === 1 ? "" : "s"} · not killed yet`}</span>`;
+  };
+  box.innerHTML = `<div class="bt head"><span>Boss</span><span>Deaths before the kill</span><span class="num">Time to kill</span><span class="num">Session</span></div>` +
+    m.rows.map(r => `<div class="bt${r.killed ? "" : " open"}"><div><div class="bname">${esc(r.name)}</div><div class="barea">${esc(r.area)}</div></div>` +
+      `<div class="bmarks">${marks(r)}</div><span class="num">${r.ttk != null ? fmtHM(r.ttk) : "–"}</span><span class="num dim">${esc(r.session)}</span></div>`).join("") +
+    `<div class="note">Deaths count as attempts when they happen near an undefeated boss's place. Time to kill: from the first attempt to the kill, in recorded time.</div>`;
+}
+
+function drawRecords(box, cards) {
+  box.innerHTML = `<div class="recs">${cards.map(c => `<div class="rec"><span class="k">${esc(c.k)}</span><span class="v">${esc(c.v)}</span>` +
+    `<span class="d">${esc(c.d)}</span></div>`).join("")}</div>`;
+}
+
+// A gear block's position: its share of the track, but never thinner than
+// GEAR_MIN_PX, so a short stretch among hours of play still shows (and is
+// kept inside the track at its right end).
+const GEAR_MIN_PX = 8;
+function gearBlockStyle(b) {
+  return `left:min(${pct(b.left)}, calc(100% - ${GEAR_MIN_PX}px));width:max(${pct(b.w)}, ${GEAR_MIN_PX}px)`;
+}
+
+function drawGear(box, m) {
+  if (!m) { box.innerHTML = '<div class="empty">No weapons recorded yet. Sessions recorded with this version on log them.</div>'; return; }
+  let lastLeft = -1;
+  const ticks = m.ticks.filter(t => { if (t.left - lastLeft < 0.03) return false; lastLeft = t.left; return true; });
+  box.innerHTML = `<div class="gear">${m.rows.map(r => `<span class="gl">${esc(r.label)}</span><div class="gt">` +
+    r.blocks.map(b => `<div data-tip="${esc(b.title)}" style="${gearBlockStyle(b)};background:${b.color}">${esc(b.label)}</div>`).join("") +
+    `</div>`).join("")}<span></span><div class="tlt">${ticks.map(t => `<span style="left:${pct(t.left)}">${esc(t.label)}</span>`).join("")}</div></div>` +
+    '<div class="note">Width is recorded play time. Upgrades show as a lighter shade of the same weapon. Hover a block for the sessions.</div>';
+}
+
+function drawSessions(box, rows) {
+  const head = ["#", "Date", "Start", "Length", "Areas", "Deaths", "Souls", "Level", "Bosses"];
+  const num = new Set([3, 5, 6, 7]);
+  box.innerHTML = `<div class="r head">${head.map((h, i) => `<span class="${num.has(i) ? "num" : ""}">${h}</span>`).join("")}</div>` +
+    rows.map(r => `<div class="r"><span class="dim">${r.n}</span><span>${esc(r.date)}</span><span class="dim">${r.start}</span>` +
+      `<span class="num">${r.length}</span><span title="${esc(r.areas)}">${esc(r.areas)}</span><span class="num">${r.deaths}</span>` +
+      `<span class="num">${r.souls}</span><span class="num">${esc(r.level)}</span>` +
+      `<span class="${r.bosses ? "" : "dim"}" title="${esc(r.bosses)}">${esc(r.bosses || "–")}</span></div>`).join("");
+}
+
+function drawPerf(box, m) {
+  if (!m.rows.length) { box.innerHTML = `<div class="empty">${esc(m.verdict)}</div>`; return; }
+  const bar = (v, max, color, line, tipText) =>
+    `<div class="b" data-tip="${esc(tipText)}"><i style="height:${pct(v / max)};background:${color}"></i>` +
+    (line == null ? "" : `<b style="bottom:${pct(line / max)}"></b>`) + `</div>`;
+  const base = "rgba(214, 170, 110, .45)", low = "var(--acc)";
+  const latMax = Math.max(200, ...m.rows.map(r => r.worst)), cpuMax = Math.max(2, ...m.rows.map(r => r.cpu)), memMax = Math.max(16, ...m.rows.map(r => r.mem));
   const charts = [
-    { title: "Poll rate", unit: "Hz", fmt: v => v.toFixed(2), series: [{ i: 4, label: "Poll rate", color: "var(--series-1)" }] },
-    { title: "Read latency", unit: "µs", fmt: v => v.toFixed(1), series: [
-      { i: 5, label: "Average", color: "var(--series-1)" }, { i: 6, label: "Worst", color: "var(--series-2)" }] },
-    { title: "CPU", unit: "% of one core", fmt: v => v.toFixed(2), series: [{ i: 7, label: "CPU", color: "var(--series-1)" }] },
-    { title: "Memory", unit: "MB", fmt: v => v.toFixed(1), series: [
-      { i: 8, label: "Working set", color: "var(--series-1)" }, { i: 9, label: "Private", color: "var(--series-2)" }] },
+    ["Poll rate", "0–10.5 Hz, target 10", "Each bar is a session's average; below 10 Hz in the accent colour.",
+      m.rows.map(r => bar(r.hz, 10.5, r.hz < 9.9 ? low : base, null, `S${r.n} · ${r.hz.toFixed(2)} Hz`))],
+    ["Read latency · average and worst", `0–${Math.round(latMax)} µs`, "Bar: average. Line: worst read in the session.",
+      m.rows.map(r => bar(r.lat, latMax, base, r.worst, `S${r.n} · avg ${r.lat.toFixed(1)} µs · worst ${Math.round(r.worst)} µs`))],
+    ["Tool CPU", `0–${+cpuMax.toFixed(1)} %`, "Share of one core, session average.",
+      m.rows.map(r => bar(r.cpu, cpuMax, base, null, `S${r.n} · ${r.cpu.toFixed(2)}%`))],
+    ["Tool memory", `0–${Math.round(memMax)} MB`, "Peak working set.",
+      m.rows.map(r => bar(r.mem, memMax, base, null, `S${r.n} · ${r.mem.toFixed(1)} MB`))],
   ];
-  // All boxes first, so each is measured at its final grid width.
-  const boxes = charts.map(() => container.appendChild(document.createElement("div")));
-  charts.forEach((c, ci) => {
-    const box = boxes[ci];
-    box.innerHTML = `<h3>${esc(c.title)} <span style="color:var(--text-muted);font-weight:400">(${esc(c.unit)})</span></h3>` +
-      (c.series.length > 1 ? `<div class="legend">${c.series.map(s => `<span><i style="background:${s.color}"></i>${esc(s.label)}</span>`).join("")}</div>` : "");
-    const W = Math.max(300, box.clientWidth || 360), H = 170, L = 48, R = 12, T = 8, B = 26;
-    const x1 = pts[pts.length - 1].h || 1 / 60;
-    const vals = c.series.flatMap(s => pts.map(p => p.v[s.i]));
-    let y0 = 0, y1 = Math.max(...vals);  // from zero: creep shows as a slope, not as noise blown up
-    if (y1 <= 0) y1 = 1;
-    const step = Math.pow(10, Math.floor(Math.log10(y1 / 4)));
-    const tick = [1, 2, 2.5, 5, 10].map(m => m * step).find(s => y1 / s <= 4) || step * 10;
-    y1 = Math.ceil(y1 / tick) * tick;
-    const X = h => L + (h / x1) * (W - L - R);
-    const Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
-    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": `${c.title} over the session` }, box);
-    for (let v = y0; v <= y1 + tick / 2; v += tick) {
-      el("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: "var(--grid)", "stroke-width": 1 }, svg);
-      const t = el("text", { x: L - 6, y: Y(v) + 4, "text-anchor": "end", "font-size": 11.5, fill: "var(--text-muted)" }, svg);
-      t.textContent = +v.toFixed(3);
-    }
-    let lastLabel = "";
-    for (let i = 0; i <= 3; i++) {
-      const h = (i / 3) * x1, label = hm(h);
-      if (label === lastLabel) continue;
-      lastLabel = label;
-      const t = el("text", { x: X(h), y: H - 8, "text-anchor": i === 0 ? "start" : i === 3 ? "end" : "middle", "font-size": 11.5, fill: "var(--text-muted)" }, svg);
-      t.textContent = label;
-    }
-    el("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: "var(--axis)", "stroke-width": 1 }, svg);
-    for (const s of c.series) {
-      const d = pts.map((p, k) => `${k && p.at - pts[k - 1].at <= 15000 ? "L" : "M"}${X(p.h).toFixed(1)},${Y(p.v[s.i]).toFixed(1)}`).join("");
-      el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
-    }
-    const cross = el("line", { y1: T, y2: H - B, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
-    const dots = c.series.map(s => el("circle", { r: 4.5, fill: s.color, stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, svg));
-    const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" }, svg);
-    hit.addEventListener("mousemove", ev => {
-      const r = svg.getBoundingClientRect();
-      const hx = ((ev.clientX - r.left) * (W / r.width) - L) / (W - L - R) * x1;
-      let best = pts[0];
-      for (const p of pts) if (Math.abs(p.h - hx) < Math.abs(best.h - hx)) best = p;
-      cross.setAttribute("x1", X(best.h)); cross.setAttribute("x2", X(best.h)); cross.setAttribute("visibility", "visible");
-      c.series.forEach((s, k) => { dots[k].setAttribute("cx", X(best.h)); dots[k].setAttribute("cy", Y(best.v[s.i])); dots[k].setAttribute("visibility", "visible"); });
-      showTip(`<b>${esc(best.v[0].slice(11))}</b> <span class="m">(${hm(best.h)} in)</span><br>` +
-        c.series.map(s => `${esc(s.label)}: ${c.fmt(best.v[s.i])} ${esc(c.unit)}`).join("<br>"), ev.clientX, ev.clientY);
-    });
-    hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); });
-  });
-}
-
-// One-line stress-test verdict for a session's perf rows.
-function perfSummary(rows) {
-  const n = rows.length, col = i => rows.map(r => r[i]);
-  const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
-  const span = (new Date(rows[n - 1][0]) - new Date(rows[0][0])) / 1000;
-  // Memory creep: the last quarter's average against the first quarter's.
-  const q = Math.max(1, Math.floor(n / 4)), ws = col(8);
-  const drift = avg(ws.slice(n - q)) - avg(ws.slice(0, q));
-  return `${fmtDur(span)} · poll rate ${avg(col(4)).toFixed(2)} Hz avg (lowest ${Math.min(...col(4)).toFixed(2)}) · ` +
-    `latency ${avg(col(5)).toFixed(1)} µs avg, ${Math.max(...col(6)).toFixed(1)} µs worst · CPU ${avg(col(7)).toFixed(2)}% · ` +
-    `memory ${ws[0].toFixed(1)} → ${ws[n - 1].toFixed(1)} MB (${drift >= 0 ? "+" : "−"}${Math.abs(drift).toFixed(1)} MB first to last quarter)`;
+  box.innerHTML = charts.map(([t, range, note, bars]) => `<div class="pc"><div class="hd"><span>${esc(t)}</span><span>${esc(range)}</span></div>` +
+    `<div class="bars">${bars.join("")}</div><div class="nt">${esc(note)}</div></div>`).join("");
 }
 
 // Area map: the walked trail in 3D (canvas, no libraries), deaths and
-// bonfire rests on top. Starts top-down. Standard browser 3D controls
-// (three.js OrbitControls convention): left-drag orbits, right-drag or
-// Shift+drag pans, the wheel zooms toward the cursor, double-click resets.
-// Orthographic projection, so distances read true when top-down.
-function areaMap(container, data) {
-  container.innerHTML = "";
+// bonfire rests on top, in `host` (the map panel's right side, which this
+// fills with the canvas and its controls). Orthographic, so distances read
+// true from above. Top-down: drag pans. Orbit: drag rotates (pitch 7° to
+// 90°). Right-drag or Shift+drag always pans; the wheel zooms toward the
+// cursor (×0.4 to ×6); double-click or Reset goes back to top-down, zoom
+// 1, height ×3.
+function areaMap(host, data, info) {
+  // Redrawn as you play (setupLive): the same area with nothing new keeps
+  // its canvas (only the figures under the name change); with more walked,
+  // it's rebuilt with the camera, zoom, pan and height you left it at.
+  const key = `${info.name}|${data.trails.map(t => t.length).join(",")}|${data.deaths.length}|${data.bonfires.length}`;
+  if (host._key === key && host.querySelector(".mtitle .s")) { host.querySelector(".mtitle .s").textContent = info.sub; return; }
+  const keep = host._view && host._view().area === info.name ? host._view() : null;
+  host._key = key;
+  host._view = null;
+  if (host._ro) host._ro.disconnect();
+  host.innerHTML = "";
   const trailPts = data.trails.flat();
   const all = [...trailPts, ...data.deaths, ...data.bonfires];
   if (!all.length) {
-    container.innerHTML = '<div class="empty">Nothing recorded in this area yet. The map fills in as you play with the tool running.</div>';
+    host.innerHTML = '<div class="mempty">Nothing recorded in this area yet. The map fills in as you play with the tool running.</div>';
     return;
   }
-  const H = 400;
-  const canvas = document.createElement("canvas");
-  canvas.className = "map3d";
-  canvas.setAttribute("role", "img");
-  canvas.setAttribute("aria-label", "3D map of the walked trail, deaths and bonfires in this area");
-  // Height exaggeration slider (x1 = true scale) on the map's right edge.
-  const wrap = document.createElement("div");
-  wrap.className = "mapwrap";
-  const side = document.createElement("div");
-  side.className = "hslider";
-  side.innerHTML =
-    '<span class="val">×1</span>' +
-    '<input type="range" min="1" max="10" step="0.5" value="1" aria-label="Height exaggeration">' +
-    '<span class="lbl">Height</span>';
-  wrap.append(canvas, side);
-  container.appendChild(wrap);
-  const bar = document.createElement("div");
-  bar.className = "mapbar";
-  bar.innerHTML =
-    '<span class="key"><i class="ramp"></i>Height: low to high</span>' +
-    '<span class="key"><i class="dot"></i>Death</span>' +
-    '<span class="key"><i class="dia"></i>Bonfire rested</span>' +
-    '<span class="hint">Drag to orbit · right-drag or Shift+drag to pan · scroll to zoom · double-click to reset · slider exaggerates height</span>' +
-    '<button type="button">Top-down</button>';
-  container.appendChild(bar);
+  host.innerHTML =
+    `<canvas role="img" aria-label="3D map of the walked trail, deaths and bonfire rests in ${esc(info.name)}"></canvas>` +
+    `<div class="mtitle"><span class="t">${esc(info.name)}</span><span class="s">${esc(info.sub)}</span><span class="h"></span></div>` +
+    `<div class="mtools"><div class="mseg"><button class="u on" data-cam="top">Top-down</button><button class="u" data-cam="orbit">Orbit</button></div>` +
+    `<button class="u mbtn sq" data-z="in" aria-label="Zoom in">+</button><button class="u mbtn sq" data-z="out" aria-label="Zoom out">−</button>` +
+    `<button class="u mbtn" data-reset>Reset</button></div>` +
+    `<div class="mheight"><span>Height</span><input type="range" min="1" max="10" step="1" value="3" aria-label="Height exaggeration"><span class="x">×3</span></div>` +
+    `<div class="mlegend"><span>low<i class="ramp"></i>high <span class="hr"></span></span><span><span class="x">✕</span>death</span>` +
+    `<span><i class="dia"></i>bonfire rest</span></div>`;
+  const canvas = host.querySelector("canvas"), hint = host.querySelector(".mtitle .h");
 
   const xs = all.map(p => p.x), ys = all.map(p => p.y), zs = all.map(p => p.z);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
@@ -525,22 +1228,29 @@ function areaMap(container, data) {
   const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
   const extent = Math.max(maxX - minX, maxZ - minZ, maxY - minY, 20);
   const heightSpan = Math.max(maxY - minY, 1);
+  const signed = v => `${v > 0 ? "+" : v < 0 ? "−" : ""}${Math.abs(Math.round(v))} m`;
+  host.querySelector(".hr").textContent = `${signed(minY)} to ${signed(maxY)}`;
 
-  const css = getComputedStyle(document.documentElement);
-  const v = name => css.getPropertyValue(name).trim();
-  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-  const lo = hex(v("--height-lo")), hi = hex(v("--height-hi"));
-  const BINS = 16;
-  const binColor = b => {
-    const t = b / (BINS - 1);
-    return `rgb(${lo.map((c, i) => Math.round(c + (hi[i] - c) * t)).join(",")})`;
+  // Height: blue-grey low, sand middle, gold high, in 16 bins (one path each).
+  const BINS = 16, LO = [79, 115, 145], MID = [185, 166, 138], HI = [240, 180, 90];
+  const mix = (a, b, t) => a.map((v, i) => Math.round(v + (b[i] - v) * t));
+  const binColor = b => { const t = b / (BINS - 1); return `rgb(${(t < 0.5 ? mix(LO, MID, t * 2) : mix(MID, HI, (t - 0.5) * 2)).join(",")})`; };
+
+  let W = 0, H = 0, fit = 1, cam = "top", yaw = 0, elev = Math.PI / 2, scale = 1, panX = 0, panY = 0, heightScale = 3;
+  const setHint = () => { hint.textContent = cam === "top" ? "drag to pan · scroll to zoom" : "drag to orbit · right-drag to pan · scroll to zoom"; };
+  const setCam = c => {
+    cam = c;
+    if (c === "top") { yaw = 0; elev = Math.PI / 2; } else { yaw = -0.6; elev = 0.62; }
+    panX = panY = 0;
+    host.querySelectorAll("[data-cam]").forEach(b => b.classList.toggle("on", b.dataset.cam === c));
+    setHint();
   };
-  const colors = { surface: v("--surface-1"), death: v("--series-2"), bonfire: v("--text-primary"), grid: v("--grid"), muted: v("--text-muted") };
-
-  let W = 0, yaw = 0, elev = Math.PI / 2, scale = 1, panX = 0, panY = 0, heightScale = 1;
   const reset = () => {
-    yaw = 0; elev = Math.PI / 2; panX = 0; panY = 0;
-    scale = Math.min(W, H) * 0.86 / extent;
+    setCam("top");
+    scale = fit;
+    heightScale = 3;
+    slider.value = 3;
+    sliderVal.textContent = "×3";
   };
   const project = p => {
     const x = p.x - cx, y = (p.y - cy) * heightScale, z = p.z - cz;
@@ -550,7 +1260,6 @@ function areaMap(container, data) {
     return [W / 2 + panX + xr * scale, H / 2 + panY - up * scale];
   };
 
-  // Trail segments grouped into height bins: one canvas path per bin.
   const segs = [];
   for (const run of data.trails) {
     for (let i = 1; i < run.length; i++) {
@@ -576,17 +1285,35 @@ function areaMap(container, data) {
     if (H / 2 < t - my) panY -= t - my - H / 2;
     else if (H / 2 > b + my) panY += H / 2 - b - my;
   };
+  // A faint ground grid at the lowest point, in round steps.
+  const gstep = [5, 10, 20, 25, 50, 100, 200].find(s => extent / s <= 10) || 500;
+  const g0x = Math.floor(minX / gstep) * gstep, g1x = Math.ceil(maxX / gstep) * gstep;
+  const g0z = Math.floor(minZ / gstep) * gstep, g1z = Math.ceil(maxZ / gstep) * gstep;
 
   let raf = 0;
   const draw = () => {
     raf = 0;
+    if (!W) return;
     clampPan();
     const dpr = window.devicePixelRatio || 1;
     const ctx = canvas.getContext("2d");
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
-    ctx.lineWidth = 1.75;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(214, 170, 110, .07)";
+    ctx.beginPath();
+    for (let x = g0x; x <= g1x; x += gstep) {
+      const [ax, ay] = project({ x, y: minY, z: g0z }), [bx, by] = project({ x, y: minY, z: g1z });
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    }
+    for (let z = g0z; z <= g1z; z += gstep) {
+      const [ax, ay] = project({ x: g0x, y: minY, z }), [bx, by] = project({ x: g1x, y: minY, z });
+      ctx.moveTo(ax, ay); ctx.lineTo(bx, by);
+    }
+    ctx.stroke();
+    ctx.lineWidth = 2;
     ctx.lineCap = "round";
+    ctx.lineJoin = "round";
     for (let b = 0; b < BINS; b++) {
       ctx.beginPath();
       for (const [p, q, bin] of segs) {
@@ -607,47 +1334,64 @@ function areaMap(container, data) {
     }
     for (const bf of data.bonfires) {
       const [x, y] = project(bf);
-      ctx.beginPath();
-      ctx.moveTo(x, y - 7); ctx.lineTo(x + 7, y); ctx.lineTo(x, y + 7); ctx.lineTo(x - 7, y); ctx.closePath();
-      ctx.fillStyle = colors.bonfire; ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = colors.surface; ctx.stroke();
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.rotate(Math.PI / 4);
+      ctx.shadowColor = "rgba(240, 170, 80, .8)";
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = "rgb(238, 188, 98)";
+      ctx.fillRect(-4.5, -4.5, 9, 9);
+      ctx.restore();
     }
+    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = "rgb(214, 82, 70)";
+    ctx.beginPath();
     for (const d of data.deaths) {
       const [x, y] = project(d);
-      ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
-      ctx.fillStyle = colors.death; ctx.fill();
-      ctx.lineWidth = 2; ctx.strokeStyle = colors.surface; ctx.stroke();
+      ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4);
+      ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4);
     }
+    ctx.stroke();
     // Scale bar only when (nearly) top-down, where it's true.
     if (elev > 1.4) {
       const unit = Math.pow(10, Math.floor(Math.log10(Math.max(1, 90 / scale))));
-      const len = unit * scale;
-      ctx.lineWidth = 2; ctx.strokeStyle = colors.muted;
-      ctx.beginPath(); ctx.moveTo(12, H - 14); ctx.lineTo(12 + len, H - 14); ctx.stroke();
-      ctx.fillStyle = colors.muted;
-      ctx.font = "11.5px system-ui, -apple-system, 'Segoe UI', sans-serif";
-      ctx.fillText(`${unit} unit${unit === 1 ? "" : "s"}`, 18 + len, H - 10);
+      const len = unit * scale, bx = W - 16 - len, by = H - 18;
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#8f826d";
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx + len, by); ctx.stroke();
+      ctx.fillStyle = "#8f826d";
+      ctx.font = "11px 'Segoe UI', system-ui, sans-serif";
+      ctx.textAlign = "right";
+      ctx.fillText(`${unit} m`, W - 16, by - 6);
     }
   };
   const redraw = () => { if (!raf) raf = requestAnimationFrame(draw); };
   const size = () => {
-    const dpr = window.devicePixelRatio || 1;
-    const first = W === 0;
-    W = Math.max(200, wrap.clientWidth - side.offsetWidth - 10);
+    const dpr = window.devicePixelRatio || 1, first = W === 0;
+    W = host.clientWidth;
+    H = host.clientHeight;
+    if (!W || !H) return;
     canvas.width = Math.round(W * dpr);
     canvas.height = Math.round(H * dpr);
-    canvas.style.width = W + "px";
-    canvas.style.height = H + "px";
-    if (first) reset();
+    const oldFit = fit;
+    fit = Math.min(W, H) * 0.78 / extent;
+    if (first) { scale = fit * (keep ? keep.zoom : 1); setHint(); } else scale *= fit / oldFit;
     draw();
+  };
+  const zoomBy = (f, mx = W / 2, my = H / 2) => {
+    const next = Math.min(fit * 6, Math.max(fit * 0.4, scale * f));
+    f = next / scale;
+    panX = mx - W / 2 - (mx - W / 2 - panX) * f;
+    panY = my - H / 2 - (my - H / 2 - panY) * f;
+    scale = next;
+    redraw();
   };
 
   // ---- controls ----
   let drag = null;
   canvas.addEventListener("contextmenu", e => e.preventDefault());
   canvas.addEventListener("pointerdown", e => {
-    drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey };
+    drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey || cam === "top" };
     canvas.setPointerCapture(e.pointerId);
     canvas.classList.add("dragging");
     hideTip();
@@ -664,7 +1408,7 @@ function areaMap(container, data) {
       if (drag.pan) { panX += dx; panY += dy; }
       else {
         yaw += dx * 0.008;
-        elev = Math.min(Math.PI / 2, Math.max(0.05, elev + dy * 0.008));
+        elev = Math.min(Math.PI / 2, Math.max(0.12, elev + dy * 0.006));
       }
       redraw();
       return;
@@ -683,100 +1427,1027 @@ function areaMap(container, data) {
   canvas.addEventListener("pointerleave", () => { if (!drag) hideTip(); });
   canvas.addEventListener("wheel", e => {
     e.preventDefault();
-    const r = canvas.getBoundingClientRect(), mx = e.clientX - r.left, my = e.clientY - r.top;
-    const f = Math.exp(-e.deltaY * 0.0015);
-    panX = mx - W / 2 - (mx - W / 2 - panX) * f;
-    panY = my - H / 2 - (my - H / 2 - panY) * f;
-    scale *= f;
-    redraw();
+    const r = canvas.getBoundingClientRect();
+    zoomBy(Math.exp(-e.deltaY * 0.0015), e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
   canvas.addEventListener("dblclick", () => { reset(); redraw(); });
-  bar.querySelector("button").addEventListener("click", () => { reset(); redraw(); });
-  const slider = side.querySelector("input"), sliderVal = side.querySelector(".val");
+  host.querySelectorAll("[data-cam]").forEach(b => b.addEventListener("click", () => { setCam(b.dataset.cam); redraw(); }));
+  host.querySelector('[data-z="in"]').addEventListener("click", () => zoomBy(1.25));
+  host.querySelector('[data-z="out"]').addEventListener("click", () => zoomBy(1 / 1.25));
+  host.querySelector("[data-reset]").addEventListener("click", () => { reset(); redraw(); });
+  const slider = host.querySelector(".mheight input"), sliderVal = host.querySelector(".mheight .x");
   slider.addEventListener("input", () => {
     heightScale = Number(slider.value);
-    sliderVal.textContent = "×" + (heightScale % 1 ? heightScale.toFixed(1) : heightScale);
+    sliderVal.textContent = "×" + heightScale;
     redraw();
   });
 
-  // A "#tilt" URL hash starts tilted (used to check the 3D view rendering).
-  new ResizeObserver(size).observe(container);
+  if (keep) {
+    setCam(keep.cam);
+    ({ yaw, elev, panX, panY, heightScale } = keep);
+    slider.value = heightScale;
+    sliderVal.textContent = "×" + heightScale;
+  }
+  host._view = () => ({ area: info.name, cam, yaw, elev, zoom: fit ? scale / fit : 1, panX, panY, heightScale });
+
+  host._ro = new ResizeObserver(size);
+  host._ro.observe(host);
   size();
-  if (location.hash === "#tilt") { yaw = 0.7; elev = 0.55; redraw(); }
+  // A "#tilt" URL hash starts in orbit (used to check the 3D view rendering).
+  if (location.hash === "#tilt" && !keep) { setCam("orbit"); redraw(); }
+}
+
+// ---------- co-op ----------
+// Only when WASD serves this page (its live page's Results button, at
+// /results): a saved results.html can't reach it. WASD makes and reads the
+// codes and builds the comparison (GET /api/coop). Your partner's data
+// follows the live page's spoiler rules for the same data, at your tier:
+// WASD sends names of things you've reached yourself (bosses you've
+// defeated, key items you have, areas you've been to) and, at Full, of
+// everything; the rest arrives unnamed and stays a count here. This page
+// copies codes out, posts pasted ones, and
+// draws both players side by side (Report for: Together). You in --series-1,
+// your partner in --series-2.
+const ago = sec => sec < 60 ? "just now" : sec < 3600 ? `${Math.floor(sec / 60)} min ago`
+  : `${Math.floor(sec / 3600)} h ${Math.floor(sec % 3600 / 60)} min ago`;
+const ATTRS = ["Vigor", "Attunement", "Endurance", "Vitality", "Strength", "Dexterity", "Intelligence", "Faith", "Luck"];
+const KEY_KINDS = { key: "Keys", quest: "Quest items", tome: "Spell tomes and scrolls", shop: "Smith, merchant and Ludleth", other: "Other" };
+
+// After Copy: /api/coop/code's answer, and what had to be left out to
+// keep the code to one chat message (2,000 characters), if anything.
+function copiedText(r) {
+  return `Copied (${(r.code || "").length.toLocaleString()} characters). Paste it to your partner.` +
+    (r.leftOut ? ` To fit one chat message it leaves out ${r.leftOut}.` : "");
+}
+
+// The status line under the codes card, from /api/coop (null: WASD didn't answer).
+function coopStatus(c) {
+  if (!c) return "WASD isn't running. Start it, then open this page from the live page's Results button.";
+  const mine = c.mineReady ? "Your code is ready to copy." : "Your code is ready a few seconds after you load into the game.";
+  if (!c.loaded) return `${mine} No partner code loaded.`;
+  const p = c.partner;
+  const who = p ? `${p.name || c.loadedName || "Your partner"}, level ${p.level}, code from ${ago(p.age)}` : c.loadedName || "your partner's code";
+  return `${mine} Loaded: ${who}. Compare under Report for: Together.`;
+}
+
+// Everything the comparison draws, from /api/coop; null until a partner is loaded.
+function coopModel(c) {
+  if (!c || !c.partner) return null;
+  const me = c.me, them = c.partner, both = !!me;
+  const ng = n => n ? `NG+${n}` : "NG";
+  const player = p => ({
+    name: p.name || "Unknown", level: p.level,
+    sub: [`level ${p.level}`, ng(p.ng), `${fmtDur(p.playSeconds)} played`].join(" · "),
+    where: p.elsewhere ? (p.beyond ? `In a new area beyond ${p.beyond}` : "Somewhere you haven't been yet") : p.area || p.region || "",
+    bonfire: p.bonfire ? `last rested at ${p.bonfire}` : "",
+  });
+  const players = [me ? player(me) : null, { ...player(them), age: `code from ${ago(them.age)}` }];
+  let where = "";
+  if (both) {
+    const w = c.where;
+    if (w.sameMap) where = w.dist >= 0
+      ? `${Math.round(w.dist)} m apart, ${w.clock}${Math.abs(w.dy) >= 3 ? (w.dy > 0 ? ", above you" : ", below you") : ""}`
+      : "On the same map";
+    else where = "In different map sections";
+  }
+  const v = (p, f) => p ? f(p) : null;
+  const progress = [
+    { label: "Bosses defeated", a: v(me, p => p.bosses[0]), b: them.bosses[0], max: them.bosses[1] || (me && me.bosses[1]) || 1},
+    { label: "Key items obtained", a: v(me, p => p.keys[0]), b: them.keys[0], max: them.keys[1] || (me && me.keys[1]) || 1},
+    { label: "Items found", a: v(me, p => p.items[0]), b: them.items[0], max: Math.max(them.items[1], me ? me.items[1] : 0) || 1},
+    { label: "Deaths", a: v(me, p => p.deaths), b: them.deaths, own: true },
+    { label: "Play time", a: v(me, p => p.playSeconds), b: them.playSeconds, fmt: fmtDur, own: true },
+    { label: "Souls held", a: v(me, p => p.souls), b: them.souls, own: true },
+  ];
+  const character = [
+    [{ label: "Soul level", a: v(me, p => p.level), b: them.level }],
+    ATTRS.map((label, k) => ({ label, a: v(me, p => p.attrs[k]), b: them.attrs[k] })),
+    [
+      { label: "Max HP", a: v(me, p => p.hp[1]), b: them.hp[1] },
+      { label: "Max FP", a: v(me, p => p.fp[1]), b: them.fp[1] },
+      { label: "Max stamina", a: v(me, p => p.stamina[1]), b: them.stamina[1] },
+    ],
+  ];
+  // Bosses and key items: named rows by group (in list order); the ones
+  // only your partner has arrive unnamed and are summed into one line.
+  const flagList = (sec, groupName, unit) => {
+    const rows = (sec && sec.rows) || [];
+    const groups = [], hidden = { n: 0, m: 0, p: 0 };
+    const count = { both: 0, me: 0, them: 0, neither: 0 };
+    for (const r of rows) {
+      const theirs = sec.compared && r.p;
+      count[r.m && theirs ? "both" : r.m ? "me" : theirs ? "them" : "neither"]++;
+      if (!r.n) { hidden.n++; hidden.m += r.m ? 1 : 0; hidden.p += theirs ? 1 : 0; continue; }
+      const g = groupName(r.g);
+      let grp = groups.find(x => x.name === g);
+      if (!grp) groups.push(grp = { name: g, rows: [] });
+      grp.rows.push({ name: r.n, me: r.m, them: theirs, meHeld: !!r.mh, themHeld: sec.compared && !!r.ph });
+    }
+    const hiddenText = hidden.n ? `${hidden.n} more ${unit} you haven't reached yet, not named: ` +
+      `${them.name || "your partner"} has ${hidden.p} of them.` : "";
+    return { compared: !!(sec && sec.compared), total: rows.length, count, groups, hidden, hiddenText };
+  };
+  const bosses = flagList(c.bosses, g => g || "Other", "bosses");
+  const keys = flagList(c.keys, g => KEY_KINDS[g] || g || "Other", "key items");
+  const items = ((c.items && c.items.rows) || []).map(r => ({ label: r.a, a: r.m, b: c.items.compared ? r.p : null, max: r.t, both: r.b }));
+  // Recorded time and deaths per area: either player's areas, most of both first.
+  const perArea = key => {
+    const m = new Map();
+    for (const [p, side] of [[me, "a"], [them, "b"]]) for (const r of (p ? p.areas : [])) {
+      if (!m.has(r.a)) m.set(r.a, { label: r.a, a: me ? 0 : null, b: 0 });
+      m.get(r.a)[side] += r[key];
+    }
+    return [...m.values()].filter(r => (r.a || 0) + r.b > 0).sort((x, y) => (y.a || 0) + y.b - ((x.a || 0) + x.b));
+  };
+  const series = [];
+  if (me && me.levels.length) series.push({ name: me.name || "You", color: "var(--series-1)", pts: me.levels.map(([h, level]) => ({ h, level })) });
+  if (them.levels.length) series.push({ name: them.name || "Partner", color: "var(--series-2)", pts: them.levels.map(([h, level]) => ({ h, level })) });
+  return {
+    players, where, both, progress, character, bosses, keys, items, itemsCompared: !!(c.items && c.items.compared),
+    time: perArea("s"), deaths: perArea("d"), levels: series, notes: c.notes || [],
+    waiting: !both ? "Load into the game to compare: until then, only your partner shows."
+      : !(c.bosses && c.bosses.rows.length) ? "Reading your bosses and items from the game: the comparison fills in within a few seconds." : "",
+  };
+}
+
+// Paired horizontal bars: per row, you (top) and your partner (bottom), on
+// one scale per call unless a row brings its own `max` (then the bars are
+// shares of it, labelled "n / max") or is `own` (scaled to its larger
+// value: measures that don't share a unit). A null value draws no bar ("–").
+function pairBars(container, rows, opts = {}) {
+  container.innerHTML = "";
+  if (!rows.length) { container.innerHTML = `<div class="empty">${esc(opts.empty || "Nothing recorded yet")}</div>`; return; }
+  const fmt = opts.fmt || fmtInt;
+  const W = Math.max(320, container.clientWidth || 480), labelW = Math.min(170, W * 0.36), valueW = 92;
+  const barH = 9, inner = 3, gap = 12, top = 4, rowH = 2 * barH + inner;
+  const H = top + rows.length * (rowH + gap);
+  const scale = Math.max(1, ...rows.flatMap(r => [r.a || 0, r.b || 0]));
+  const plotW = W - labelW - valueW;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opts.unit || "comparison" }, container);
+  el("line", { x1: labelW, x2: labelW, y1: 0, y2: H - gap / 2, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+  rows.forEach((r, i) => {
+    const y = top + i * (rowH + gap), f = r.fmt || fmt;
+    const max = r.max || (r.own ? Math.max(1, r.a || 0, r.b || 0) : scale);
+    const label = el("text", { x: labelW - 8, y: y + rowH / 2 + 4.5, "text-anchor": "end", "font-size": 12.5, fill: "var(--text-secondary)" }, svg);
+    label.textContent = r.label.length > 26 ? r.label.slice(0, 25) + "…" : r.label;
+    [["a", "var(--series-1)"], ["b", "var(--series-2)"]].forEach(([side, color], k) => {
+      const val = r[side], by = y + k * (barH + inner);
+      if (r.max) el("rect", { x: labelW, y: by, width: plotW, height: barH, rx: 3, fill: "var(--grid)" }, svg);
+      if (val != null && val > 0) {
+        const w = Math.max(2, Math.min(1, val / max) * plotW), r3 = Math.min(3, w / 2);
+        el("path", { d: `M${labelW},${by}h${w - r3}a${r3},${r3} 0 0 1 ${r3},${r3}v${barH - 2 * r3}a${r3},${r3} 0 0 1 -${r3},${r3}h-${w - r3}z`, fill: color }, svg);
+      }
+      const t = el("text", { x: labelW + (r.max ? plotW : Math.max(2, ((val || 0) / max) * plotW)) + 6, y: by + barH - 0.5, "font-size": 11.5, fill: "var(--text-primary)" }, svg);
+      t.textContent = val == null ? "–" : r.max && !r.fmt ? `${f(val)} / ${f(r.max)}` : f(val);
+    });
+    const hit = el("rect", { x: 0, y: y - gap / 2, width: W, height: rowH + gap, fill: "transparent" }, svg);
+    hit.addEventListener("mousemove", ev => showTip(`<b>${esc(r.label)}</b><br>` +
+      [[opts.a || "You", r.a], [opts.b || "Partner", r.b]].map(([who, val]) =>
+        `<span class="m">${esc(who)}:</span> ${val == null ? "–" : f(val)}${r.max && !r.fmt ? ` of ${f(r.max)}` : ""}`).join("<br>") +
+      (r.both != null && r.b != null ? `<br><span class="m">both:</span> ${f(r.both)}` : ""), ev.clientX, ev.clientY));
+    hit.addEventListener("mouseleave", hideTip);
+  });
+}
+
+// One bar split into who has what: both, only you, only your partner, neither.
+function overlapBar(container, count, total, names) {
+  container.innerHTML = "";
+  if (!total) return;
+  const parts = [
+    ["both", "Both of you", "var(--text-secondary)"], ["me", `Only ${names[0]}`, "var(--series-1)"],
+    ["them", `Only ${names[1]}`, "var(--series-2)"], ["neither", "Neither yet", "var(--grid)"],
+  ].filter(([k]) => count[k] > 0);
+  const bar = document.createElement("div");
+  bar.className = "overlap";
+  bar.innerHTML = parts.map(([k, label, color]) =>
+    `<span style="flex:${count[k]};background:${color}" title="${esc(label)}: ${count[k]}"></span>`).join("");
+  const key = document.createElement("div");
+  key.className = "overkey";
+  key.innerHTML = parts.map(([k, label, color]) => `<span><i style="background:${color}"></i>${esc(label)} ${count[k]}</span>`).join("");
+  container.append(bar, key);
+}
+
+// Named rows by group, with a dot per player (filled: has it; ringed: held).
+function flagGrid(container, list, names, what) {
+  overlapBar(container, list.count, list.total, names);
+  const dot = (on, held, side) => `<i class="dot ${side}${on ? " on" : ""}${held ? " held" : ""}" title="${on ? "" : "not "}${what}${held ? ", held" : ""}"></i>`;
+  const html = list.groups.map(g => `<div class="fg"><h3>${esc(g.name)}</h3>` + g.rows.map(r =>
+    `<div class="fr">${dot(r.me, r.meHeld, "a")}${dot(r.them, r.themHeld, "b")}<span>${esc(r.name)}</span></div>`).join("") + `</div>`).join("");
+  const grid = document.createElement("div");
+  grid.className = "fgrid";
+  grid.innerHTML = html;
+  container.appendChild(grid);
+  if (list.hidden.n) {
+    const p = document.createElement("p");
+    p.className = "cap";
+    p.textContent = list.hiddenText;
+    container.appendChild(p);
+  }
+  if (!list.compared && list.total) {
+    const p = document.createElement("p");
+    p.className = "cap warn";
+    p.textContent = `Can't compare: your lists differ (${names[1]}'s count is in Progress above).`;
+    container.appendChild(p);
+  }
+}
+
+// Level over play time, one line per player; crosshair tooltip with both.
+function levelLines(container, series) {
+  container.innerHTML = "";
+  const all = series.flatMap(s => s.pts);
+  if (all.length < 2) { container.innerHTML = '<div class="empty">Needs a couple of recorded samples from either of you</div>'; return; }
+  const W = Math.max(320, container.clientWidth || 480), H = 240, L = 40, R = 12, T = 10, B = 30;
+  let x0 = Math.min(...all.map(p => p.h)), x1 = Math.max(...all.map(p => p.h));
+  if (x1 - x0 < 0.05) { x0 -= 0.05; x1 += 0.05; }
+  let y0 = Math.min(...all.map(p => p.level)), y1 = Math.max(...all.map(p => p.level));
+  if (y1 - y0 < 4) { y0 -= 2; y1 += 2; }
+  const X = h => L + (h - x0) / (x1 - x0) * (W - L - R);
+  const Y = v => T + (1 - (v - y0) / (y1 - y0)) * (H - T - B);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "Soul level over play time, both players" }, container);
+  const step = Math.max(1, Math.ceil((y1 - y0) / 4));
+  for (let v = Math.ceil(y0); v <= y1; v += step) {
+    el("line", { x1: L, x2: W - R, y1: Y(v), y2: Y(v), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    el("text", { x: L - 6, y: Y(v) + 4, "text-anchor": "end", "font-size": 11.5, fill: "var(--text-muted)" }, svg).textContent = Math.round(v);
+  }
+  const hm = h => `${Math.floor(h)}h ${String(Math.floor((h % 1) * 60)).padStart(2, "0")}m`;
+  let lastTick = "";
+  for (let i = 0; i <= 4; i++) {
+    const h = x0 + (i / 4) * (x1 - x0), label = hm(h);
+    if (label === lastTick) continue;
+    lastTick = label;
+    el("text", { x: X(h), y: H - 10, "text-anchor": i === 0 ? "start" : i === 4 ? "end" : "middle", "font-size": 11.5, fill: "var(--text-muted)" }, svg).textContent = label;
+  }
+  el("line", { x1: L, x2: W - R, y1: H - B, y2: H - B, stroke: "var(--axis)", "stroke-width": 1 }, svg);
+  const dots = series.map(s => {
+    // Stepped: a level holds until the next one.
+    const d = s.pts.map((p, i) => i ? `H${X(p.h).toFixed(1)}V${Y(p.level).toFixed(1)}` : `M${X(p.h).toFixed(1)},${Y(p.level).toFixed(1)}`).join("");
+    el("path", { d, fill: "none", stroke: s.color, "stroke-width": 2, "stroke-linejoin": "round" }, svg);
+    if (s.pts.length === 1) el("circle", { cx: X(s.pts[0].h), cy: Y(s.pts[0].level), r: 3.5, fill: s.color }, svg);
+    return el("circle", { r: 4.5, fill: s.color, stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, svg);
+  });
+  const cross = el("line", { y1: T, y2: H - B, stroke: "var(--axis)", "stroke-width": 1, visibility: "hidden" }, svg);
+  const hit = el("rect", { x: L, y: T, width: W - L - R, height: H - T - B, fill: "transparent" }, svg);
+  hit.addEventListener("mousemove", ev => {
+    const box = svg.getBoundingClientRect();
+    const hx = x0 + ((ev.clientX - box.left) * (W / box.width) - L) / (W - L - R) * (x1 - x0);
+    cross.setAttribute("x1", X(hx)); cross.setAttribute("x2", X(hx)); cross.setAttribute("visibility", "visible");
+    const lines = series.map((s, k) => {
+      const at = s.pts.filter(p => p.h <= hx).pop();
+      if (!at) { dots[k].setAttribute("visibility", "hidden"); return `<span class="m">${esc(s.name)}:</span> –`; }
+      dots[k].setAttribute("cx", X(hx)); dots[k].setAttribute("cy", Y(at.level)); dots[k].setAttribute("visibility", "visible");
+      return `<span class="m">${esc(s.name)}:</span> level ${at.level}`;
+    });
+    showTip(`<b>${hm(hx)} played</b><br>${lines.join("<br>")}`, ev.clientX, ev.clientY);
+  });
+  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dots.forEach(d => d.setAttribute("visibility", "hidden")); });
+}
+
+function renderCompare(m) {
+  if (!m) return;  // shown or hidden by Report for (setMode)
+  const $ = id => document.getElementById(id);
+  const names = ["you", m.players[1].name];
+  const opts = { a: m.players[0] ? m.players[0].name : "You", b: m.players[1].name };
+  $("cmpPlayers").innerHTML = m.players.map((p, k) => !p
+    ? `<div class="who a"><div class="wn">You</div><div class="ws">Not in the game</div></div>`
+    : `<div class="who ${k ? "b" : "a"}"><div class="wn">${esc(p.name)}${k ? "" : ' <span class="you">you</span>'}</div>` +
+      `<div class="ws">${esc(p.sub)}</div><div class="ws">${esc([p.where, p.bonfire].filter(Boolean).join(" · "))}</div>` +
+      (p.age ? `<div class="wa">${esc(p.age)}</div>` : "") + `</div>`).join("") +
+    (m.where ? `<div class="where">${esc(m.where)}</div>` : "");
+  $("cmpNote").textContent = m.waiting;
+  $("cmpNote").hidden = !m.waiting;
+  $("cmpNotes").innerHTML = m.notes.map(n => `<p class="cap warn">${esc(n)}</p>`).join("");
+  pairBars($("cmpProgress"), m.progress, opts);
+  $("cmpCharacter").innerHTML = "";
+  for (const group of m.character) {
+    const d = document.createElement("div");
+    $("cmpCharacter").appendChild(d);
+    pairBars(d, group, opts);
+  }
+  flagGrid($("cmpKeys"), m.keys, names, "obtained");
+}
+
+function setupCoop() {
+  const $ = id => document.getElementById(id);
+  const msg = (id, text, error = false) => { $(id).textContent = text; $(id).classList.toggle("err", error); };
+  if (location.protocol !== "http:") {
+    document.querySelectorAll("#coop button, #coop textarea").forEach(b => { b.disabled = true; });
+    $("coopState").textContent = "Open this page from the live page's Results button, with WASD running, to copy or paste co-op codes and compare.";
+    return;
+  }
+  // Polling also keeps your code current: WASD only reads your bosses and
+  // items while one of its pages is open. Redrawn only when something changed.
+  let last = "";
+  async function refresh() {
+    let c = null, text = "";
+    try { const r = await fetch("/api/coop", { cache: "no-store" }); if (r.ok) { text = await r.text(); c = JSON.parse(text); } } catch (e) { c = null; }
+    $("coopState").textContent = coopStatus(c);
+    onCoopData(c);
+    if (text === last) return;
+    last = text;
+    renderCompare(coopModel(c));
+  }
+  async function copyText(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch (e) { /* fall back below */ }
+    const ta = document.createElement("textarea");
+    ta.value = text; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    let ok = false;
+    try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+  const actions = {
+    async copy() {
+      msg("coopCopyMsg", "");
+      let r;
+      try { r = await (await fetch("/api/coop/code", { cache: "no-store" })).json(); } catch (e) { msg("coopCopyMsg", "WASD isn't running.", true); return; }
+      if (!r.ok) { msg("coopCopyMsg", r.error || "Not ready yet.", true); return; }
+      if (await copyText(r.code)) msg("coopCopyMsg", copiedText(r));
+      else { $("coopIn").value = r.code; msg("coopCopyMsg", "Couldn't copy: it's in the box below, copy it from there.", true); }
+    },
+    async paste() {
+      msg("coopMsg", "");
+      try { $("coopIn").value = await navigator.clipboard.readText(); $("coopIn").focus(); }
+      catch (e) { $("coopIn").focus(); msg("coopMsg", "The browser didn't allow it: press Ctrl+V in the box.", true); }
+    },
+    async load() {
+      const code = $("coopIn").value.replace(/\s+/g, "");
+      if (!code) { msg("coopMsg", "Paste your partner's code first.", true); return; }
+      msg("coopMsg", "");
+      let r;
+      try { r = await (await fetch(`/api/coop/partner?code=${encodeURIComponent(code)}`, { method: "POST" })).json(); }
+      catch (e) { msg("coopMsg", "WASD isn't running.", true); return; }
+      if (!r.ok) { msg("coopMsg", `Not loaded: ${r.error}`, true); return; }
+      $("coopIn").value = "";
+      msg("coopMsg", `Loaded ${r.name || "your partner"}.`);
+      refresh();
+    },
+    async clear() {
+      msg("coopMsg", "");
+      try { await fetch("/api/coop/partner?clear=1", { method: "POST" }); msg("coopMsg", "Partner cleared."); }
+      catch (e) { msg("coopMsg", "WASD isn't running.", true); return; }
+      refresh();
+    },
+  };
+  document.querySelectorAll("#coop [data-coop]").forEach(b => b.addEventListener("click", () => actions[b.dataset.coop]()));
+  // Charts are drawn at the card's width: redraw on a resize.
+  let resizeTimer = 0;
+  addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { last = ""; refresh(); }, 200); });
+  refresh();
+  setInterval(refresh, 2000);
+}
+
+// ---------- pair mode (Report for: Together / Partner) ----------
+// Your partner's side comes from /api/coop: `pair.partner` (sessions, boss
+// kills, records, totals) and `partner` (areas, levels, the game's
+// counters), already filtered by WASD so nothing names what you haven't
+// reached. partnerSummary turns it into the same shape summarise() gives
+// for your own sessions, so the solo sections draw it as they are.
+const PARTNER_BOSS = "A boss you haven't defeated";
+const PARTNER_WEAPON = "A weapon you haven't found";
+
+function partnerSummary(pp, cp) {
+  const count = pp.sessions.length;
+  const nOf = idx => (idx >= 0 && idx < count ? count - idx : 0);
+  const killsBy = new Map();
+  for (const b of pp.bosses) {
+    if (b.session < 0) continue;
+    if (!killsBy.has(b.session)) killsBy.set(b.session, []);
+    killsBy.get(b.session).push(b.name || PARTNER_BOSS);
+  }
+  let offset = 0;
+  const sessions = [...pp.sessions].reverse().map((x, k) => {
+    const idx = count - 1 - k, dur = x.minutes * 60;
+    const named = killsBy.get(idx) || [];
+    const kills = named.map(name => ({ name, t: dur }));
+    for (let i = named.length; i < x.kills; i++) kills.push({ name: "A boss", t: dur });
+    const gear = [];
+    x.weapons.forEach((w, h) => {
+      if (w) gear.push({ slot: h ? "L" : "R", id: `${w.name}|${w.upgrade}`, name: w.name || PARTNER_WEAPON, upgrade: w.upgrade, t: 0 });
+    });
+    const s = {
+      n: k + 1, start: new Date(x.start * 60000), startedAt: "", dur, deaths: x.deaths, gained: x.gained,
+      perHour: dur >= 60 ? x.gained / (dur / 3600) : null, level: x.levels[1], levelStart: x.levels[0], levelEnd: x.levels[1],
+      // Per-area time inside a session isn't in a code: each area gets an equal share.
+      areas: x.areas, segs: x.areas.map(a => ({ area: a, sec: dur / x.areas.length })),
+      perf: null, offset, kills, deathEvents: [], gear,
+    };
+    offset += dur;
+    return s;
+  });
+  const areaTime = new Map(), areaDeaths = new Map(), areaOrder = [];
+  for (const a of cp.areas || []) {
+    areaOrder.push(a.a);
+    areaTime.set(a.a, a.s);
+    if (a.d) areaDeaths.set(a.a, a.d);
+  }
+  const mark = (m, key) => (m ? { sec: m.seconds, area: m.area, n: nOf(m.session), key } : null);
+  const t = pp.totals;
+  return {
+    partner: true, name: cp.name || "Partner", sessions, rows: [...sessions].reverse(), areaOrder, areaTime, areaDeaths,
+    deathsByArea: new Map(), trailsByArea: new Map(), bonfiresByArea: new Map(),
+    level: (cp.levels || []).map(([h, level]) => ({ h, level })), levelRec: [],
+    seconds: t.seconds, deaths: t.deaths, lost: t.lost, recovered: t.recovered, gained: t.gained,
+    deathsTotal: cp.deaths, lastPlay: cp.playSeconds * 1000,
+    marks: { life: mark(pp.life), firstDeath: mark(pp.firstDeath) },
+    bossRows: pp.bosses.map(b => {
+      const s = sessions.find(x => x.n === nOf(b.session));
+      return { name: b.name || PARTNER_BOSS, area: b.area, killed: true, deaths: b.deaths, ttk: b.ttk == null ? null : b.ttk * 60,
+               session: s ? `S${s.n} · ${fmtDate(s.start)}` : "", kill: b.kill };
+    }),
+  };
+}
+// The partner's Bosses · attempts and kills (only kills: attempts at
+// bosses not yet killed aren't in a code).
+function partnerBossModel(Sp) {
+  const rows = [...Sp.bossRows].sort((a, b) => a.kill - b.kill);
+  const at = rows.reduce((a, r) => a + r.deaths, 0);
+  return { rows, meta: `${rows.length} boss${rows.length === 1 ? "" : "es"} killed · ${at} death${at === 1 ? "" : "s"} at bosses` };
+}
+
+// Your sessions matched to the ones in a code (pair.me): by start minute.
+function myCodeSession(S, x) {
+  return S.sessions.find(s => Math.abs(Math.floor(s.start.getTime() / 60000) - x.start) <= 1) || null;
+}
+
+// Played together: the overlap total, both players' totals, and three
+// figures. Together blocks pair a session of yours (n) with one of theirs.
+function togetherModel(Sme, Sp, pair, myBosses) {
+  const meCount = pair.me ? pair.me.sessions.length : 0, pCount = pair.partner.sessions.length;
+  const blocks = pair.together.blocks.map(b => {
+    const mine = pair.me ? myCodeSession(Sme, pair.me.sessions[b.me]) : null;
+    return { ...b, myN: mine ? mine.n : 0, partnerN: pCount - b.partner, startDate: new Date(b.start * 60000) };
+  });
+  const mySet = new Set(blocks.map(b => b.myN).filter(Boolean)), pSet = new Set(blocks.map(b => b.partnerN));
+  const deathsMe = Sme.sessions.filter(s => mySet.has(s.n)).reduce((a, s) => a + s.deaths, 0);
+  const deathsP = Sp.sessions.filter(s => pSet.has(s.n)).reduce((a, s) => a + s.deaths, 0);
+  // Bosses together: both of you killed it, each kill inside the same overlap.
+  const inBlock = (minute, b) => minute >= b.start && minute <= b.start + b.minutes;
+  const killMinute = (S, n, name) => {
+    const s = S.sessions.find(x => x.n === n);
+    const k = s && s.kills.find(x => x.name === name);
+    return k ? Math.floor(s.start.getTime() / 60000 + k.t / 60) : null;
+  };
+  const together = [];
+  for (const r of myBosses.rows.filter(r => r.killed)) {
+    const theirs = Sp.bossRows.find(x => x.name === r.name);
+    if (!theirs) continue;
+    const s = Sme.sessions.find(x => x.kills.some(k => k.name === r.name));
+    const mine = s ? killMinute(Sme, s.n, r.name) : null;
+    if (mine != null && blocks.some(b => inBlock(mine, b) && inBlock(theirs.kill, b))) together.push(r.name);
+  }
+  const minutes = pair.together.minutes;
+  const dates = blocks.map(b => b.startDate).sort((a, b) => a - b);
+  const pct = (m, sec) => (sec > 0 ? Math.round(m / (sec / 60) * 100) : 0);
+  return {
+    minutes, blocks, together, mySessions: mySet, partnerSessions: pSet,
+    time: fmtHM(minutes * 60),
+    sub: blocks.length ? `${blocks.length} session${blocks.length === 1 ? "" : "s"} together · ${fmtDate(dates[0])} to ${fmtDate(dates[dates.length - 1])}` : "No sessions played together yet",
+    me: `${fmtHM(Sme.seconds)} recorded, ${Sme.sessions.length - mySet.size} solo session${Sme.sessions.length - mySet.size === 1 ? "" : "s"}`,
+    partner: `${fmtHM(Sp.seconds)} recorded, ${Sp.sessions.length - pSet.size} solo session${Sp.sessions.length - pSet.size === 1 ? "" : "s"}`,
+    stats: [
+      { k: "Bosses together", v: String(together.length), s: together.join(", ") || "none yet" },
+      { k: "Deaths together", v: String(deathsMe + deathsP), s: `you ${deathsMe} · ${Sp.name} ${deathsP}` },
+      { k: "Share of play", v: `${pct(minutes, Sme.seconds)}%`, s: `of yours · ${pct(minutes, Sp.seconds)}% of ${Sp.name}'s` },
+    ],
+  };
+}
+
+// Tiles side by side: your value, then theirs.
+function pairTiles(Sme, Sp) {
+  const a = tilesModel(Sme), b = tilesModel(Sp);
+  return a.map((t, i) => ({ k: t.k, a: t.v, b: b[i].v, s: `${t.s ? t.s : "–"} · ${b[i].s ? b[i].s : "–"}`, text: t.text }));
+}
+
+// Time and deaths per area, both of you, in your first-visited order then theirs.
+function pairAreaBars(Sme, Sp) {
+  const names = [...new Set([...Sme.areaOrder, ...Sme.areaDeaths.keys(), ...Sp.areaOrder, ...Sp.areaDeaths.keys()])];
+  const rows = (key, fmt) => {
+    const r = names.map(n => ({ name: n, a: Sme[key].get(n) || 0, b: Sp[key].get(n) || 0 })).filter(x => x.a || x.b || key === "areaTime");
+    const max = Math.max(1, ...r.flatMap(x => [x.a, x.b]));
+    return r.map(x => {
+      const va = x.a ? fmt(x.a) : "–", vb = x.b ? fmt(x.b) : "–";
+      return { ...x, wa: x.a / max, wb: x.b / max, va, vb, label: `${va} · ${vb}` };
+    });
+  };
+  return { time: rows("areaTime", fmtHM), deaths: rows("areaDeaths", String) };
+}
+
+// Bosses for both: one row per boss, a line per player; TOGETHER when you
+// felled it in the same overlap. Their unnamed kills come last.
+function pairBossRows(myRows, theirRows, together) {
+  const names = [...new Set([...myRows.filter(r => r.killed).map(r => r.name), ...theirRows.filter(r => r.name !== PARTNER_BOSS).map(r => r.name)])];
+  const line = r => (r ? { killed: r.killed, deaths: r.deaths, ttk: r.ttk, session: r.session } : null);
+  const rows = names.map(name => {
+    const m = myRows.find(r => r.name === name && r.killed), t = theirRows.find(r => r.name === name);
+    return { name, area: (m || t).area, tag: together.includes(name) ? "together" : "", me: line(m), them: line(t) };
+  });
+  for (const t of theirRows.filter(r => r.name === PARTNER_BOSS)) rows.push({ name: PARTNER_BOSS, area: "", tag: "", me: null, them: line(t) });
+  for (const m of myRows.filter(r => !r.killed)) rows.push({ name: m.name, area: m.area, tag: "", me: line(m), them: null });
+  return rows;
+}
+
+// Firsts and records for both, AHEAD on the better line where "better" means something.
+function pairRecords(mine, theirs) {
+  return mine.map((c, i) => {
+    const t = theirs[i];
+    let ahead = -1;
+    if (c.score != null && t.score != null && c.score !== t.score) ahead = c.score > t.score ? 0 : 1;
+    return { k: c.k, lines: [{ v: c.v, d: c.d, ahead: ahead === 0 }, { v: t.v, d: t.d, ahead: ahead === 1 }] };
+  });
+}
+
+// Joint timeline: one column per day from the first session of either of
+// you to the last; three lanes (your solo play, together, theirs). Each
+// block is a day's play in that lane.
+function jointTimelineModel(Sme, Sp, tg) {
+  const day = d => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const all = [...Sme.sessions, ...Sp.sessions].filter(s => s.start.getTime());
+  if (!all.length) return null;
+  const first = Math.min(...all.map(s => day(s.start))), last = Math.max(...all.map(s => day(s.start)));
+  const days = Math.round((last - first) / 86400000) + 1;
+  const lane = () => new Map();
+  const lanes = { me: lane(), together: lane(), them: lane() };
+  const add = (m, s, minutes, areas) => {
+    const k = Math.round((day(s.start) - first) / 86400000);
+    const v = m.get(k) || { minutes: 0, areas: new Set(), date: s.start };
+    v.minutes += minutes;
+    areas.forEach(a => v.areas.add(a));
+    m.set(k, v);
+  };
+  for (const s of Sme.sessions) if (s.start.getTime() && !tg.mySessions.has(s.n)) add(lanes.me, s, s.dur / 60, s.areas);
+  for (const s of Sp.sessions) if (s.start.getTime() && !tg.partnerSessions.has(s.n)) add(lanes.them, s, s.dur / 60, s.areas);
+  for (const b of tg.blocks) {
+    const s = Sme.sessions.find(x => x.n === b.myN) || { start: b.startDate, areas: [] };
+    add(lanes.together, { start: b.startDate }, b.minutes, s.areas);
+  }
+  const blocks = (m, who) => [...m].map(([k, v]) => ({
+    left: k / days, w: 1 / days, label: fmtClock(v.minutes * 60),
+    title: `${who} · ${fmtDate(v.date)} · ${fmtHM(v.minutes * 60)}${v.areas.size ? ` · ${[...v.areas].join(", ")}` : ""}`,
+  }));
+  const step = Math.max(1, Math.ceil(days / 12));
+  const ticks = [];
+  for (let k = 0; k < days; k += step) ticks.push({ left: k / days, label: fmtDate(new Date(first + k * 86400000)) });
+  return { days, ticks, lanes: [
+    { who: "me", name: `${Sme.name || "You"} solo`, blocks: blocks(lanes.me, Sme.name || "You") },
+    { who: "together", name: "Together", blocks: blocks(lanes.together, "Together") },
+    { who: "them", name: `${Sp.name} solo`, blocks: blocks(lanes.them, Sp.name) },
+  ] };
+}
+
+// Who found what: world pickups per area (areas you haven't reached are
+// summed by WASD), and boss kills split by who.
+function whoFoundModel(c, myBosses, Sp, tg) {
+  const rows = (c.items && c.items.rows || []).filter(r => r.m || r.p).map(r => ({
+    name: r.a, me: r.m, them: c.items.compared ? r.p : null, both: c.items.compared ? r.b : null,
+    only: c.items.compared ? `${r.m - r.b} · ${r.p - r.b}` : "–",
+  }));
+  const sum = k => rows.reduce((a, r) => a + (r[k] || 0), 0);
+  const total = { me: sum("me"), them: sum("them"), both: sum("both"), only: `${sum("me") - sum("both")} · ${sum("them") - sum("both")}` };
+  const mine = myBosses.rows.filter(r => r.killed).map(r => r.name);
+  const theirs = Sp.bossRows.map(r => r.name);
+  const hidden = theirs.filter(n => n === PARTNER_BOSS).length;
+  const groups = [
+    { title: "Felled together", kind: "together", items: tg.together },
+    { title: "Both, separately", kind: "both", items: mine.filter(n => theirs.includes(n) && !tg.together.includes(n)) },
+    { title: "Only you", kind: "me", items: mine.filter(n => !theirs.includes(n)) },
+    { title: `Only ${Sp.name}`, kind: "them", items: theirs.filter(n => n !== PARTNER_BOSS && !mine.includes(n)).concat(hidden ? [`${hidden} you haven't defeated`] : []) },
+  ];
+  const onlyMine = total.me - (total.both || 0), onlyTheirs = (total.them || 0) - (total.both || 0);
+  return { rows, total, groups, compared: !!(c.items && c.items.compared),
+    only: [`Only you: ${onlyMine} item${onlyMine === 1 ? "" : "s"}`, `Only ${Sp.name}: ${onlyTheirs} item${onlyTheirs === 1 ? "" : "s"} (not named)`] };
+}
+
+// The sessions table for both, newest first; sessions played together
+// share one Together row.
+function pairSessionRows(Sme, Sp, tg) {
+  const rows = [];
+  const lvl = s => (s.levelStart && s.levelEnd ? `${s.levelStart} → ${s.levelEnd}` : "–");
+  for (const s of Sme.sessions) if (!tg.mySessions.has(s.n)) rows.push({ who: "me", at: s.start, s, deaths: String(s.deaths), level: lvl(s), bosses: s.kills.map(k => k.name) });
+  for (const s of Sp.sessions) if (!tg.partnerSessions.has(s.n)) rows.push({ who: "them", at: s.start, s, deaths: String(s.deaths), level: lvl(s), bosses: s.kills.map(k => k.name) });
+  for (const b of tg.blocks) {
+    const m = Sme.sessions.find(x => x.n === b.myN), t = Sp.sessions.find(x => x.n === b.partnerN);
+    rows.push({ who: "together", at: b.startDate, s: { start: b.startDate, dur: b.minutes * 60, areas: m ? m.areas : t ? t.areas : [] },
+      deaths: `${m ? m.deaths : "–"} · ${t ? t.deaths : "–"}`, level: `${m ? lvl(m) : "–"} · ${t ? lvl(t) : "–"}`,
+      bosses: [...new Set([...(m ? m.kills.map(k => k.name) : []), ...(t ? t.kills.map(k => k.name) : [])])] });
+  }
+  return rows.sort((a, b) => b.at - a.at).map(r => ({
+    who: r.who, date: `${fmtDow(r.at)} ${fmtDate(r.at)}`, start: fmtTime(r.at), length: fmtClock(r.s.dur),
+    areas: r.s.areas.join(" → ") || "–", deaths: r.deaths, level: r.level, bosses: r.bosses.join(", "),
+  }));
+}
+
+// ---------- pair sections ----------
+const dotOf = who => `<i class="pd ${who}"></i>`;
+
+function drawPlayed(box, tg, Sme, Sp) {
+  box.innerHTML = `<div class="played"><div class="pl"><div class="eyebrow acc">Played together</div><div class="big">${esc(tg.time)}</div>` +
+    `<div class="sub2">${esc(tg.sub)}</div><div class="who2"><span>${dotOf("me")}<b class="me">${esc(Sme.name || "You")}</b> ${esc(tg.me)}</span>` +
+    `<span>${dotOf("them")}<b class="them">${esc(Sp.name)}</b> ${esc(tg.partner)}</span></div></div>` +
+    `<div class="pstats">${tg.stats.map(s => `<div><div class="k">${esc(s.k)}</div><div class="v">${esc(s.v)}</div><div class="s">${esc(s.s)}</div></div>`).join("")}</div></div>`;
+}
+
+function drawPairTiles(box, tiles) {
+  box.innerHTML = tiles.map(t => `<div class="tile"><div class="k">${esc(t.k)}</div>` +
+    `<div class="pv">${dotOf("me")}<span class="v sm${t.text ? " text" : ""}">${esc(t.a)}</span></div>` +
+    `<div class="pv">${dotOf("them")}<span class="v sm them${t.text ? " text" : ""}">${esc(t.b)}</span></div>` +
+    `<div class="s">${esc(t.s)}</div></div>`).join("");
+}
+
+// A pair bar's hover overlay: the area, then each player's value.
+function pairBarTip(r, names) {
+  return `<b>${esc(r.name)}</b>` + [["me", names[0], r.va], ["them", names[1], r.vb]]
+    .map(([who, name, v]) => `<div class="tl">${dotOf(who)}<span>${esc(name)}</span><span class="tv">${esc(v)}</span></div>`).join("");
+}
+// With `names`, the values show on hover over the row (pairBarTip), not
+// beside it: Together's times don't fit the value column.
+function drawPairBars(box, rows, empty, names) {
+  if (!rows.length) { box.innerHTML = `<div class="empty">${esc(empty)}</div>`; return; }
+  box.innerHTML = rows.map(r => `<div class="brow${r.a || r.b ? "" : " zero"}${names ? ` hov" data-tip-html="${esc(pairBarTip(r, names))}` : ""}">` +
+    `<span class="n"${names ? "" : ` title="${esc(r.name)}"`}>${esc(r.name)}</span>` +
+    `<div class="two"><div class="tr thin"><div class="fill" style="width:${pct(r.wa)};background:var(--you)"></div></div>` +
+    `<div class="tr thin"><div class="fill" style="width:${pct(r.wb)};background:var(--partner)"></div></div></div>` +
+    (names ? "" : `<span class="v">${esc(r.label)}</span>`) + `</div>`).join("");
+}
+
+function drawPairBosses(box, rows, names) {
+  if (!rows.length) { box.innerHTML = '<div class="empty">No boss kills recorded yet for either of you.</div>'; return; }
+  const line = (l, who) => {
+    if (!l) return `<div class="pline">${dotOf(who)}<span class="bn">not killed</span></div>`;
+    const shown = Math.min(l.deaths, 30);
+    return `<div class="pline">${dotOf(who)}<span class="bx">${"✕".repeat(shown)}${l.deaths > shown ? `<em>+${l.deaths - shown}</em>` : ""}</span>` +
+      (l.killed ? '<span class="ok">✓</span>' : "") +
+      `<span class="bn">${l.killed ? (l.deaths ? `${l.deaths} death${l.deaths === 1 ? "" : "s"}` : "first try") : `${l.deaths} · not killed yet`}</span></div>`;
+  };
+  const cell = (l, f) => `<span>${l ? esc(f(l)) : "–"}</span>`;
+  box.innerHTML = `<div class="bt head"><span>Boss</span><span>Deaths before the kill</span><span class="num">Time to kill</span><span class="num">Session</span></div>` +
+    rows.map(r => `<div class="bt"><div><div class="bname">${esc(r.name)}${r.tag ? ` <span class="tag">${esc(r.tag)}</span>` : ""}</div>` +
+      `<div class="barea">${esc(r.area)}</div></div><div class="plines">${line(r.me, "me")}${line(r.them, "them")}</div>` +
+      `<div class="num pcol">${cell(r.me, l => (l.ttk != null ? fmtHM(l.ttk) : "–"))}${cell(r.them, l => (l.ttk != null ? fmtHM(l.ttk) : "–"))}</div>` +
+      `<div class="num pcol dim">${cell(r.me, l => l.session)}${cell(r.them, l => l.session)}</div></div>`).join("") +
+    `<div class="note">${esc(names[0])} on top, ${esc(names[1])} below. Time to kill: from the first attempt to the kill.</div>`;
+}
+
+function drawPairRecords(box, cards) {
+  box.innerHTML = `<div class="recs">${cards.map(c => `<div class="rec"><span class="k">${esc(c.k)}</span>` +
+    c.lines.map((l, i) => `<div class="rl"><div class="rv">${dotOf(i ? "them" : "me")}<span class="v sm${i ? " them" : ""}">${esc(l.v)}</span>` +
+      (l.ahead ? '<span class="ahead">ahead</span>' : "") + `</div><span class="d">${esc(l.d)}</span></div>`).join("") + `</div>`).join("")}</div>`;
+}
+
+function drawJoint(box, m) {
+  if (!m) { box.innerHTML = '<div class="empty">Nothing recorded yet</div>'; return; }
+  box.innerHTML = `<div class="joint"><span></span><div class="tlt">${m.ticks.map(t => `<span style="left:${pct(t.left)}">${esc(t.label)}</span>`).join("")}</div>` +
+    m.lanes.map(l => `<span class="ln ${l.who}">${dotOf(l.who)}${esc(l.name)}</span><div class="lane ${l.who}" style="--cols:${m.days}">` +
+      l.blocks.map(b => `<div data-tip="${esc(b.title)}" style="left:${pct(b.left)};width:${pct(b.w)}">${b.w * 600 > 30 ? esc(b.label) : ""}</div>`).join("") +
+      `</div>`).join("") + `</div><div class="note">Each column is one day. Sessions whose times overlap count as played together; the middle lane shows the overlap. Hover a block for its areas.</div>`;
+}
+
+function drawWhoFound(box, m, names) {
+  const row = r => `<span class="n">${esc(r.name)}</span><span class="num">${r.me}</span><span class="num">${r.them ?? "–"}</span>` +
+    `<span class="num dim">${r.both ?? "–"}</span><span class="num dim">${esc(r.only)}</span>`;
+  box.innerHTML = `<div class="who-found"><div><div class="wf"><span class="h">Area</span><span class="h num me">${esc(names[0])}</span>` +
+    `<span class="h num them">${esc(names[1])}</span><span class="h num">Both</span><span class="h num">Only one</span>` +
+    (m.rows.length ? m.rows.map(row).join("") : '<span class="n dim">No items found yet</span><span></span><span></span><span></span><span></span>') +
+    `<span class="n tot">Total</span><span class="num tot">${m.total.me}</span><span class="num tot">${m.total.them ?? "–"}</span>` +
+    `<span class="num tot">${m.total.both ?? "–"}</span><span class="num tot">${esc(m.total.only)}</span></div>` +
+    (m.compared ? "" : '<p class="cap warn">Your item lists differ: only counts.</p>') + `</div>` +
+    `<div><div class="ph"><span class="pt">Boss kills</span><span class="rule"></span></div>` +
+    m.groups.map(g => `<div class="kg ${g.kind}"><div class="kt">${esc(g.title)}</div><div class="chiplist">` +
+      (g.items.length ? g.items.map(i => `<span>${esc(i)}</span>`).join("") : '<em>none</em>') + `</div></div>`).join("") +
+    `<div class="ph" style="margin-top:6px"><span class="pt">Items only one of you has</span><span class="rule"></span></div>` +
+    m.only.map((t, i) => `<div class="only">${dotOf(i ? "them" : "me")}${esc(t)}</div>`).join("") + `</div></div>`;
+}
+
+function drawPairSessions(box, rows, names) {
+  const head = ["Who", "Date", "Start", "Length", "Areas", "Deaths", "Level", "Bosses"];
+  const num = new Set([3, 5, 6]);
+  const who = { me: names[0], them: names[1], together: "Together" };
+  box.innerHTML = `<div class="r pr head">${head.map((h, i) => `<span class="${num.has(i) ? "num" : ""}">${h}</span>`).join("")}</div>` +
+    rows.map(r => `<div class="r pr ${r.who}"><span class="w ${r.who}">${esc(who[r.who])}</span><span>${esc(r.date)}</span><span class="dim">${r.start}</span>` +
+      `<span class="num">${r.length}</span><span title="${esc(r.areas)}">${esc(r.areas)}</span><span class="num">${esc(r.deaths)}</span>` +
+      `<span class="num">${esc(r.level)}</span><span class="${r.bosses ? "" : "dim"}" title="${esc(r.bosses)}">${esc(r.bosses || "–")}</span></div>`).join("");
+}
+
+function drawPairHeat(box, a, b, names) {
+  if (!a && !b) { box.innerHTML = '<div class="empty">Nothing recorded yet</div>'; return; }
+  const max = Math.max(a ? a.max : 0, b ? b.max : 0);
+  const one = (m, who, name) => {
+    if (!m) return `<div><div class="hname ${who}">${dotOf(who)}${esc(name)}</div><div class="empty">Nothing recorded</div></div>`;
+    const hours = Array.from({ length: 24 }, (_, h) => `<span class="hl">${h % 3 === 0 ? pad2(h) : ""}</span>`).join("");
+
+    const rows = m.grid.map((row, d) => `<span class="dl">${m.days[d]}</span>` + row.map((v, h) => {
+      const a2 = (0.12 + 0.88 * v / max).toFixed(2);
+      const bg = v > 0.5 ? (who === "me" ? `rgba(239, 226, 200, ${a2})` : `oklch(0.74 0.11 320 / ${a2})`) : "";
+      return `<div class="c" data-tip="${m.days[d]} ${pad2(h)}:00 · ${Math.round(v)} min"${bg ? ` style="background:${bg}"` : ""}></div>`;
+    }).join("")).join("");
+
+    return `<div><div class="hname ${who}">${dotOf(who)}${esc(name)}</div><div class="heat"><span></span>${hours}${rows}</div><div class="heatsum">${esc(m.sum)}</div></div>`;
+  };
+  box.innerHTML = `<div class="pair2">${one(a, "me", names[0])}${one(b, "them", names[1])}</div>`;
+}
+
+function drawPairGear(box, a, b, names) {
+  const inner = (m, who, name) => {
+    const tmp = document.createElement("div");
+    drawGear(tmp, m);
+    return `<div class="hname ${who}">${dotOf(who)}${esc(name)}</div>${tmp.innerHTML}`;
+  };
+  box.innerHTML = inner(a, "me", names[0]) + inner(b, "them", names[1]);
 }
 
 // ---------- page ----------
-function render(character) {
-  const sessions = SESSIONS.filter(s => s.character === character);
-  const S = summarise(sessions);
-  document.getElementById("subtitle").textContent =
-    `${character} · ${sessions.length} session${sessions.length === 1 ? "" : "s"} recorded`;
+const page = { character: "", mode: "you", partner: "", cmpA: 0, cmpB: 0, cmpPicked: false, mapArea: "", S: null, tier: -1, tierSetAt: 0, coop: null, coopText: "" };
 
-  const deadliest = [...S.areaDeaths.entries()].sort((a, b) => b[1] - a[1])[0];
-  const tiles = [
-    ["Time recorded", fmtDur(S.seconds), `${fmtDur(S.lastPlay / 1000)} total in-game`],
-    ["Deaths", fmtInt(S.deaths), `${fmtInt(S.deathsTotal)} across the playthrough`],
-    ["Souls lost", fmtInt(S.lost), `${fmtInt(S.recovered)} recovered`],
-    ["Souls gained", fmtInt(S.gained), S.seconds >= 60 ? `${fmtInt(S.gained / (S.seconds / 3600))} per hour` : "per hour after 1 min"],
-    ["Deadliest area", deadliest ? deadliest[0] : "None yet", deadliest ? `${deadliest[1]} death${deadliest[1] === 1 ? "" : "s"}` : "", true],
-  ];
-  document.getElementById("tiles").innerHTML = tiles.map(([k, v, n, isText]) =>
-    `<div class="tile"><div class="k">${esc(k)}</div><div class="v${isText ? " text" : ""}">${esc(v)}</div><div class="n">${esc(n)}</div></div>`).join("");
-
-  const byValue = m => [...m.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
-  hbar(document.getElementById("areaTime"), byValue(S.areaTime), "var(--series-1)", fmtDur, "Time");
-  hbar(document.getElementById("areaDeaths"), byValue(S.areaDeaths), "var(--series-2)", fmtInt, "Deaths");
-  levelLine(document.getElementById("levelLine"), S.level);
-
-  // Areas with anything to draw, most time spent first.
-  const mapSel = document.getElementById("mapArea");
-  const mapAreas = [...new Set([...S.trailsByArea.keys(), ...S.deathsByArea.keys(), ...S.bonfiresByArea.keys()])]
-    .sort((a, b) => (S.areaTime.get(b) || 0) - (S.areaTime.get(a) || 0));
-  mapSel.innerHTML = mapAreas.map(a => `<option>${esc(a)}</option>`).join("") || "<option>Nothing recorded yet</option>";
-  const drawMap = () => areaMap(document.getElementById("areaMap"), {
-    trails: S.trailsByArea.get(mapSel.value) || [],
-    deaths: S.deathsByArea.get(mapSel.value) || [],
-    bonfires: S.bonfiresByArea.get(mapSel.value) || [],
+// Spoilers: the guide's one spoiler tier setting (live page, overlay, F9),
+// shown and changed here too. WASD keeps it, so a change on either page
+// shows on the other at its next poll.
+function showTier(t) {
+  const changed = page.tier !== t;
+  page.tier = t;
+  if (changed && page.S) renderReport();
+  document.querySelectorAll("#tiers button").forEach(b => {
+    const on = Number(b.dataset.tier) === t;
+    b.classList.toggle("on", on);
+    b.setAttribute("aria-pressed", String(on));
   });
-  mapSel.onchange = drawMap;
-  drawMap();
+}
+function setupTier() {
+  document.querySelectorAll("#tiers button").forEach(b => b.addEventListener("click", async () => {
+    const t = Number(b.dataset.tier);
+    showTier(t);
+    page.tierSetAt = Date.now();
+    try { await fetch(`/api/tier?t=${t}`, { method: "POST" }); } catch (e) { /* the next poll shows what WASD has */ }
+  }));
+}
 
-  // Tool performance: sessions with a perf.csv, longest first (the stress test).
-  const perfSel = document.getElementById("perfSession");
-  const withPerf = sessions.filter(s => s.perf && s.perf.length >= 2).sort((a, b) => b.perf.length - a.perf.length);
-  perfSel.innerHTML = withPerf.map((s, i) => {
-    const st = s.events.find(e => e.type === "start") || {};
-    const span = (new Date(s.perf[s.perf.length - 1][0]) - new Date(s.perf[0][0])) / 1000;
-    return `<option value="${i}">${esc(fmtWhen(st.startedAt || s.file))} · ${fmtDur(span)}</option>`;
-  }).join("") || "<option>No perf data yet</option>";
-  perfSel.disabled = !withPerf.length;
-  const drawPerf = () => {
-    const s = withPerf[Number(perfSel.value)];
-    document.getElementById("perfSummary").textContent = s ? perfSummary(s.perf) : "";
-    if (s) perfCharts(document.getElementById("perfCharts"), s.perf);
-    else document.getElementById("perfCharts").innerHTML =
-      '<div class="empty">No perf figures yet. Sessions recorded from now on save them (a .perf.csv beside each session log).</div>';
+// Report for: You | Together | Partner, switched in place (scroll kept).
+// Together and Partner need a partner's code; Partner shows their report
+// from it, Together both of you.
+function havePair() { return !!(page.coop && page.coop.pair && page.coop.pair.partner); }
+function setMode(mode) {
+  if (mode !== "you" && !havePair()) mode = "you";
+  page.mode = mode;
+  document.querySelectorAll("#modes button").forEach(b => b.classList.toggle("on", b.dataset.mode === mode));
+  renderReport();
+}
+// Called by the co-op card's poll with /api/coop's answer (null: no answer).
+function onCoopData(c) {
+  document.getElementById("tierCtl").hidden = !c;
+  // A click just now wins over a poll answer that left before it.
+  if (c && c.tier != null && Date.now() - page.tierSetAt > 2500) showTier(c.tier);
+  page.partner = c && c.loaded ? (c.partner && c.partner.name) || c.loadedName || "Partner" : "";
+  const ok = !!(c && c.pair && c.pair.partner);
+  for (const m of ["together", "partner"]) {
+    const b = document.querySelector(`#modes [data-mode="${m}"]`);
+    b.disabled = !ok;
+    b.title = ok ? (m === "together" ? `You and ${page.partner}` : `${page.partner}'s report, from their code`) : "Load your partner's code below";
+  }
+  document.getElementById("modePartner").textContent = page.partner || "Partner";
+  // Redraw only when the answer changed (the poll runs every 2 s).
+  const text = JSON.stringify(c);
+  if (text === page.coopText) return;
+  page.coopText = text;
+  page.coop = c;
+  // A "#together" or "#partner" URL hash opens in that report (used to check the rendering).
+  const hashMode = location.hash.slice(1);
+  if (ok && page.mode === "you" && (hashMode === "together" || hashMode === "partner") && !page.hashUsed) {
+    page.hashUsed = true;
+    setMode(hashMode);
+  } else if (page.mode !== "you" || !ok) setMode(ok ? page.mode : "you");
+}
+
+function drawCompareSessions(list, names) {
+  const box = document.getElementById("compareSessions");
+  if (list.length < 2) { box.innerHTML = '<div class="empty">Needs two recorded sessions</div>'; return; }
+  // The newest two, until you pick (then yours stay, as sessions are added).
+  if (!page.cmpPicked || !list.find(s => s.key === page.cmpA) || !list.find(s => s.key === page.cmpB)) {
+    page.cmpB = list[list.length - 1].key;
+    page.cmpA = list[list.length - 2].key;
+  }
+  const a = list.find(s => s.key === page.cmpA), b = list.find(s => s.key === page.cmpB);
+  const rows = compareModel(list.map(s => ({ ...s, n: s.key })), page.cmpA, page.cmpB);
+  if (names) rows.unshift({ k: "Player", a: a.who, b: b.who, d: "", tone: "" });
+  const chips = (label, key, on) => `<div class="chips"><span class="l">${label}</span><div class="o">` +
+    list.map(s => `<button class="u${s.key === on ? " on" : ""}${s.side ? ` ${s.side}` : ""}" data-pick="${key}" data-k="${s.key}" title="${esc(`${s.who} · ${fmtDate(s.start)} · ${s.areas.join(", ")}`)}">${esc(s.label)}</button>`).join("") +
+    `</div></div>`;
+  box.innerHTML = chips("A", "cmpA", page.cmpA) + chips("B", "cmpB", page.cmpB) +
+    `<div class="cmpt"><span class="hk"></span><span class="h">A · ${esc(a.label)} · ${esc(fmtDate(a.start))}</span><span class="h">B · ${esc(b.label)} · ${esc(fmtDate(b.start))}</span><span class="hk d">B vs A</span>` +
+    rows.map(r => `<span class="k">${esc(r.k)}</span><span title="${esc(r.a)}">${esc(r.a)}</span><span title="${esc(r.b)}">${esc(r.b)}</span><span class="d ${r.tone}">${esc(r.d)}</span>`).join("") +
+    `</div>`;
+  box.querySelectorAll("[data-pick]").forEach(btn => btn.addEventListener("click", () => {
+    page[btn.dataset.pick] = btn.dataset.k;
+    page.cmpPicked = true;
+    drawCompareSessions(list, names);
+  }));
+}
+// The sessions Compare picks from: yours ("S3"), or both of you ("Y·S3", "P·S2").
+function compareList(S, prefix, who, side) {
+  return S.sessions.map(s => ({ ...s, key: `${side || "me"}${s.n}`, label: `${prefix}S${s.n}`, who, side }));
+}
+
+function drawMap(S) {
+  const areas = mapAreasModel(S);
+  if (!areas.find(a => a.name === page.mapArea)) {
+    // Default: where the most time went.
+    page.mapArea = areas.length ? areas.reduce((a, b) => (b.time > a.time ? b : a)).name : "";
+  }
+  const list = document.getElementById("mapAreas");
+  list.innerHTML = areas.length ? areas.map(a => `<button class="u${a.name === page.mapArea ? " on" : ""}" data-area="${esc(a.name)}">` +
+    `<span class="an">${esc(a.name)}</span><span class="as">${esc(a.sub)}</span></button>`).join("")
+    : '<div class="empty">Nothing walked yet</div>';
+  list.querySelectorAll("[data-area]").forEach(b => b.addEventListener("click", () => { page.mapArea = b.dataset.area; drawMap(S); }));
+  const cur = areas.find(a => a.name === page.mapArea);
+  areaMap(document.getElementById("mapHost"), {
+    trails: S.trailsByArea.get(page.mapArea) || [],
+    deaths: S.deathsByArea.get(page.mapArea) || [],
+    bonfires: S.bonfiresByArea.get(page.mapArea) || [],
+  }, {
+    name: page.mapArea || "No area yet",
+    sub: cur ? `${fmtHM(cur.time)} walked · ${cur.deaths} death${cur.deaths === 1 ? "" : "s"} · ${cur.rests} bonfire rest${cur.rests === 1 ? "" : "s"}` : "",
+  });
+}
+
+const $id = id => document.getElementById(id);
+function show(id, on) { $id(id).hidden = !on; }
+function setText(id, text) { $id(id).textContent = text; }
+
+// One report, solo: yours (from your sessions) or your partner's (from
+// their code). Their map, tool performance and attempts at bosses not
+// killed yet aren't in a code.
+function renderSolo(S, mine) {
+  const name = mine ? page.character : S.name;
+  const first = S.sessions[0], last = S.sessions[S.sessions.length - 1];
+  const range = first && first.start.getTime() ? ` · ${fmtDate(first.start)} to ${fmtDate(last.start)}, ${last.start.getFullYear()}` : "";
+  setText("title", name || "WASD Results");
+  setText("subtitle", S.sessions.length ? `${S.sessions.length} session${S.sessions.length === 1 ? "" : "s"} recorded${range}` +
+    (mine ? "" : ` · from ${name}'s code`) : mine ? "No sessions recorded yet" : `From ${name}'s code: no sessions recorded`);
+  show("played", false);
+  show("compare", false);
+  show("whoFoundPanel", false);
+  show("mapPanel", mine);
+  show("perf", mine);
+  show("partnerMapNote", false);
+  drawTiles($id("tiles"), tilesModel(S));
+  if (mine) drawMap(S);
+  const bars = areaBars(S);
+  drawBars($id("areaTime"), bars.time, "var(--acc)", "Nothing recorded yet");
+  drawBars($id("areaDeaths"), bars.deaths, "var(--death)", "Nothing recorded yet");
+  setText("deathsMeta", `${S.deaths} death${S.deaths === 1 ? "" : "s"} recorded`);
+  const bm = mine ? bossModel(S, page.tier) : partnerBossModel(S);
+  setText("bossMeta", bm.meta);
+  drawBosses($id("bosses"), bm);
+  drawRecords($id("records"), recordsModel(S, bm));
+  setText("recordsMeta", `from ${S.sessions.length} session${S.sessions.length === 1 ? "" : "s"}`);
+  drawGear($id("gear"), gearModel(S));
+  const lm = levelModel(S, mine ? "recorded" : "game");
+  setText("levelMeta", lm ? `SL ${lm.first} → ${lm.last}` : "");
+  setText("levelNote", mine ? "◇ marks a boss kill. Horizontal axis: recorded play time, in hours."
+    : "Horizontal axis: play time on the game's own clock, in hours.");
+  drawLevel($id("levelChart"), lm);
+  setText("timelineTitle", "Areas visited across the playthrough");
+  setText("timelineMeta", `${S.sessions.length} session${S.sessions.length === 1 ? "" : "s"} · ${fmtHM(S.seconds)} recorded`);
+  drawTimeline($id("timeline"), timelineModel(S));
+  setText("heatMeta", "minutes played by weekday and hour");
+  drawHeat($id("heat"), heatModel(S));
+  drawCompareSessions(compareList(S, "", name), null);
+  drawSessions($id("sessions"), sessionRowsModel(S));
+  if (mine) {
+    const pm = perfModel(S);
+    setText("perfVerdict", pm.verdict);
+    drawPerf($id("perfBody"), pm);
+  }
+}
+
+// Together: both of you, side by side, in the same sections, plus Played
+// together and Who found what.
+function renderPair(Sme, c) {
+  const Sp = partnerSummary(c.pair.partner, c.partner);
+  Sme.name = page.character || "You";
+  const names = [Sme.name, Sp.name];
+  const myBosses = bossModel(Sme, page.tier);
+  const tg = togetherModel(Sme, Sp, c.pair, myBosses);
+  setText("title", `${names[0]} & ${names[1]}`);
+  setText("subtitle", `${Sme.sessions.length + Sp.sessions.length} sessions recorded · ${tg.blocks.length} played together · ${Sp.name}'s from their code`);
+  show("played", true);
+  drawPlayed($id("playedBody"), tg, Sme, Sp);
+  show("compare", true);
+  show("whoFoundPanel", true);
+  show("mapPanel", true);
+  show("partnerMapNote", true);
+  show("perf", true);
+  drawPairTiles($id("tiles"), pairTiles(Sme, Sp));
+  drawMap(Sme);
+  const bars = pairAreaBars(Sme, Sp);
+  drawPairBars($id("areaTime"), bars.time, "Nothing recorded yet", names);
+  drawPairBars($id("areaDeaths"), bars.deaths, "No deaths recorded");
+  setText("deathsMeta", `${names[0]} · ${names[1]}`);
+  const theirBosses = partnerBossModel(Sp);
+  setText("bossMeta", `${names[0]} ${myBosses.rows.filter(r => r.killed).length} · ${names[1]} ${theirBosses.rows.length} · ${tg.together.length} together`);
+  drawPairBosses($id("bosses"), pairBossRows(myBosses.rows, theirBosses.rows, tg.together), names);
+  drawPairRecords($id("records"), pairRecords(recordsModel(Sme, myBosses), recordsModel(Sp, theirBosses)));
+  setText("recordsMeta", "“ahead” marks the better of the two");
+  drawPairGear($id("gear"), gearModel(Sme), gearModel(Sp), names);
+  setText("levelMeta", `${names[0]} · ${names[1]}`);
+  setText("levelNote", "Horizontal axis: play time on each game's own clock, in hours.");
+  levelLines($id("levelChart"), [
+    { name: names[0], color: "var(--you)", pts: Sme.level },
+    { name: names[1], color: "var(--partner)", pts: Sp.level },
+  ].filter(s => s.pts.length));
+  setText("timelineTitle", "Joint timeline");
+  setText("timelineMeta", `${names[0]} ${Sme.sessions.length} · ${names[1]} ${Sp.sessions.length} · together ${tg.blocks.length}`);
+  drawJoint($id("timeline"), jointTimelineModel(Sme, Sp, tg));
+  // Under it, each player's areas across their own recorded play, as in the solo report.
+  for (const [S, who, name] of [[Sme, "me", names[0]], [Sp, "them", names[1]]]) {
+    const strip = document.createElement("div");
+    drawTimeline(strip, timelineModel(S));
+    $id("timeline").insertAdjacentHTML("beforeend", `<div class="hname ${who}" style="margin-top:14px">${dotOf(who)}${esc(name)} · areas visited</div>${strip.innerHTML}`);
+  }
+  setText("heatMeta", "minutes played by weekday and hour, on one scale");
+  drawPairHeat($id("heat"), heatModel(Sme), heatModel(Sp), names);
+  drawWhoFound($id("whoFound"), whoFoundModel(c, myBosses, Sp, tg), names);
+  drawCompareSessions([...compareList(Sme, "Y·", names[0], "me"), ...compareList(Sp, "P·", names[1], "them")]
+    .sort((a, b) => a.start - b.start), names);
+  drawPairSessions($id("sessions"), pairSessionRows(Sme, Sp, tg), names);
+  const pm = perfModel(Sme);
+  setText("perfVerdict", `${pm.verdict} (yours)`);
+  drawPerf($id("perfBody"), pm);
+}
+
+function renderReport() {
+  if (!page.S) return;
+  const c = page.coop;
+  if (page.mode === "together" && havePair()) renderPair(page.S, c);
+  else if (page.mode === "partner" && havePair()) renderSolo(partnerSummary(c.pair.partner, c.partner), false);
+  else renderSolo(page.S, true);
+}
+
+function render(character) {
+  page.character = character;
+  page.S = summarise(SESSIONS.filter(s => s.character === character));
+  $id("charName").textContent = character || "–";
+  $id("modeYou").textContent = character || "You";
+  renderReport();
+}
+
+// Character on this save: the characters with recorded sessions.
+function setupCharacters() {
+  const ctl = $id("charCtl"), btn = $id("charBtn"), menu = $id("charMenu");
+  if (!ctl.hidden || !SESSIONS.length) return;
+  ctl.hidden = false;
+  const fill = () => {
+    const counts = new Map();
+    for (const s of SESSIONS) counts.set(s.character, (counts.get(s.character) || 0) + 1);
+    menu.innerHTML = charactersOf(SESSIONS).map(c => `<button class="u${c === page.character ? " on" : ""}" role="option" data-char="${esc(c)}">` +
+      `<span>${esc(c)}</span><span class="n">${counts.get(c)} session${counts.get(c) === 1 ? "" : "s"}${c === page.character ? " ✓" : ""}</span></button>`).join("");
+    menu.querySelectorAll("[data-char]").forEach(b => b.addEventListener("click", () => { open(false); render(b.dataset.char); }));
   };
-  perfSel.onchange = drawPerf;
-  drawPerf();
-
-  document.getElementById("sessions").innerHTML =
-    `<thead><tr><th>Started</th><th class="num">Length</th><th class="num">Deaths</th><th class="num">Souls/h</th><th class="num">Level</th><th>Areas</th></tr></thead><tbody>` +
-    S.rows.map(r => `<tr><td>${esc(fmtWhen(r.startedAt))}</td><td class="num">${fmtDur(r.dur)}</td><td class="num">${r.deaths}</td>` +
-      `<td class="num">${r.perHour == null ? "–" : fmtInt(r.perHour)}</td><td class="num">${r.level ?? ""}</td><td>${esc(r.areas.join(", "))}</td></tr>`).join("") +
-    `</tbody>`;
+  const open = on => { menu.hidden = !on; btn.setAttribute("aria-expanded", String(on)); if (on) fill(); };
+  btn.addEventListener("click", e => { e.stopPropagation(); open(menu.hidden); });
+  document.addEventListener("click", e => { if (!menu.hidden && !e.target.closest("#charCtl")) open(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") open(false); });
 }
 
-const characters = [...new Set(SESSIONS.map(s => s.character))];
-if (!characters.length) {
-  document.querySelector("main").innerHTML = '<h1>WASD Results</h1><p class="sub">No sessions recorded yet. Run <code>wasd-cli.exe window</code> (or <code>overlay</code> / <code>stats --live</code>) and play for at least a minute.</p>';
-} else {
-  const sel = document.getElementById("player");
-  sel.innerHTML = characters.map(c => `<option>${esc(c)}</option>`).join("");
-  document.getElementById("playerPicker").hidden = characters.length < 2;
-  sel.onchange = () => render(sel.value);
-  render(characters[0]);
+document.querySelectorAll("#modes button").forEach(b => b.addEventListener("click", () => { if (!b.disabled) setMode(b.dataset.mode); }));
+$id("perfToggle").addEventListener("click", () => {
+  const body = $id("perfBody"), btn = $id("perfToggle");
+  body.hidden = !body.hidden;
+  btn.setAttribute("aria-expanded", String(!body.hidden));
+  btn.querySelector(".ar").textContent = body.hidden ? "▸" : "▾";
+});
+
+// As you play: while WASD serves this page, every 5 s it asks /api/sessions
+// whether anything has been recorded since (WASD compares a stamp of the
+// session files, so an idle poll reads none) and redraws from the new
+// sessions in place, keeping the character, report, map area and view,
+// compare picks and open sections as they were. Not while the tab is
+// hidden, or mid-drag on the map (the next poll catches up).
+function setupLive() {
+  if (location.protocol !== "http:") return;
+  let stamp = "", shown = sessionsKey(SESSIONS);
+  const poll = async () => {
+    if (document.hidden || document.querySelector("#mapHost canvas.dragging")) return;
+    let r;
+    try { r = await (await fetch(`/api/sessions?have=${stamp}`, { cache: "no-store" })).json(); } catch (e) { return; }
+    if (!r || !r.stamp) return;
+    stamp = r.stamp;
+    if (!r.sessions) return;
+    const list = tagCharacters(r.sessions), key = sessionsKey(list);
+    if (key === shown) return;
+    shown = key;
+    SESSIONS = list;
+    setupCharacters();
+    const chars = charactersOf(SESSIONS);
+    render(chars.includes(page.character) ? page.character : chars[0] || "");
+  };
+  setInterval(poll, 5000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) poll(); });
 }
+
+setupCharacters();
+render(charactersOf(SESSIONS)[0] || "");
+setupTier();
+setupCoop();
+setupLive();
 </script>
 </body>
 </html>

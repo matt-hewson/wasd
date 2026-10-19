@@ -30,7 +30,7 @@ game, and the code using it was written for this project.
 | [SoulSplitter](https://github.com/FrankvdStam/SoulSplitter) (FrankvdStam) | GPL-3.0 | How event flags are stored and read; boss-defeated flag ids | `src/main.cpp`, `data/bosses.tsv` |
 | [ds3-attack-rating-calculator](https://github.com/Derling/ds3-attack-rating-calculator) (Derling) | none stated | The shape of the attack-rating calculation | `src/main.cpp` |
 | [Fextralife DS3 wiki](https://darksouls3.wiki.fextralife.com/) | site terms | Formulas and breakpoints: soul level cost, equip load, rings, attunement, stamina, roll tiers, poise; expected values in tests | `src/main.cpp`, `tests/cpp/test_formulas.cpp` |
-| [BinderTool](https://github.com/Atvaark/BinderTool) (Atvaark) | MIT | The archive (BHD5 / BDT) layout, name hash and DCX container; **the archives' public RSA keys and the regulation file's AES key, copied as constants** | `tools/ds3_archive.py` |
+| [BinderTool](https://github.com/Atvaark/BinderTool) (Atvaark) | MIT | The archive (BHD5 / BDT) layout, name hash and DCX container; **the archives' public RSA keys, copied as constants** (the regulation file's key is read from the user's own game exe) | `tools/ds3_archive.py` |
 | [SoulsFormats](https://github.com/soulsmods/SoulsFormatsNEXT) (soulsmods) | GPL-3.0 | The MSB3 map layout (param lists, parts, Treasure events), the BND4 and FMG text layouts, the EMEVD event-script header | `tools/` |
 | [DarkScript3](https://github.com/AinTunez/DarkScript3) (AinTunez and contributors) | none stated | What DS3's event-script instructions do and how their arguments are laid out (its `ds3-common.emedf.json`), used to read the NPC questlines behind `data/missables.tsv` | research for `data/missables.tsv` |
 
