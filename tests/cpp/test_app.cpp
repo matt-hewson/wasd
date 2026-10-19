@@ -16,7 +16,7 @@ WindowSnapshot Attached() {
 }  // namespace app_test
 
 TEST(app_window_title) {
-  CHECK_EQ(MainWindowModel(WindowSnapshot{}, kMapReady, "").title, std::string("WASD 0.1.0"));
+  CHECK_EQ(MainWindowModel(WindowSnapshot{}, kMapReady, "").title, std::string("WASD 0.1.1"));
 }
 
 TEST(app_window_waiting_for_the_game) {

@@ -48,7 +48,7 @@ prompt:
 ```
 
 `build\` isn't in git (2026-10-07): build after cloning or pulling.
-Produces two exes from one compile of `src\main.cpp`, version **0.1.0**:
+Produces two exes from one compile of `src\main.cpp`, version **0.1.1**:
 
 - **`build\WASD.exe`**, the app: double-click it. A window with its own taskbar button
   (status, map data, live page, overlay on/off, spoiler tier, results page, data folder,
@@ -154,13 +154,13 @@ No game needed. From a PowerShell prompt:
 
 | Suite | Where | Covers | Runs on |
 |---|---|---|---|
-| **C++** | `tests/cpp` | Formulas (soul cost, attunement, CalcCorrectGraph curves, poise, stamina, roll tiers), session bookkeeping (deaths, souls lost / recovered / gained, time per area), area lookup, JSON and the perf CSV, overlay wrapping, clock directions, Untended Graves vs. normal world, the route `needs` rules and "later" bosses. **Data lint:** every `data/*.tsv` through the real loaders, and the tables checked against each other (route and missable flags name real bosses, area names are areas of `region_areas.tsv`, key items exist under the same name in `item_names.tsv`, every boss in exactly one route step). | Windows + MSVC |
-| **JS** | `tests/js` | The live page's `derive()` (the spoiler rules for bosses and items at each tier, the boss chart, "later" bosses, tiles, status) and its text parsers; the results page's `summarise()` (trail runs, warp attribution, time and deaths per area) and the perf verdict. The functions are cut out of the templates by `tests/js/extract.mjs`, so the tests run the pages' real code. | Node 18+ |
+| **C++** | `tests/cpp` | Formulas (soul cost, attunement, CalcCorrectGraph curves, poise, stamina, roll tiers), session bookkeeping (deaths, souls lost / recovered / gained, time per area), area lookup, JSON and the perf CSV, the co-op codes (bit packing at every length, snapshot and text round trips, clamped fields, every kind of refused packet or code, list fingerprints, the recorded time, deaths and levels summed from session logs, and the comparison's rows, the no-spoil rule (partner-only bosses, key items, areas and locations never named, at any tier) and distance), overlay wrapping, clock directions, Untended Graves vs. normal world, the route `needs` rules and "later" bosses. **Data lint:** every `data/*.tsv` through the real loaders, and the tables checked against each other (route and missable flags name real bosses, area names are areas of `region_areas.tsv`, key items exist under the same name in `item_names.tsv`, every boss in exactly one route step). | Windows + MSVC |
+| **JS** | `tests/js` | The live page's `derive()` (the spoiler rules for bosses and items at each tier, the boss chart, "later" bosses, tiles, status), its Results link and text parsers; the results page's `summarise()` (trail runs, warp attribution, time and deaths per area, sessions in order, levels against recorded time), each section's model (tiles, bars per area, map areas, soul level, timeline, when you play, compare two sessions, sessions table, tool performance), the co-op status line and `coopModel()` (everything the comparison draws). Both pages' whole scripts must parse. The functions are cut out of the templates by `tests/js/extract.mjs`, so the tests run the pages' real code. | Node 18+ |
 | **Packaging** | `tests/pkg` | Rebuilds the exe, then checks what Windows and the installer read from it: the version resource matches `src/version.h` (numbers, product name, publisher), the manifest is `asInvoker` and the only one, the icon is embedded at every size, the exe is x64 and imports only Windows' own DLLs (no Visual C++ runtime), and `--version` prints the version. The install/uninstall cycle (`-Only pkg`) adds a real install, upgrade and uninstall. | Windows |
 | **Installer** | `tests/pkg/cycle_installer.py` | `.\test.ps1 -Only pkg` (not in the default run): compiles test builds of the installer, then installs into a folder with a space and an accent, checks every file, the uninstall entry's fields, the Start menu shortcut's target and identity, and the installed exes; upgrades to a "0.1.1" test build (same folder, one entry, data kept); checks uninstall is refused while the app runs; uninstalls (everything gone, data kept); and `/REMOVEUSERDATA=1`. All under a test identity, so a real install is never touched. | Windows + Inno Setup 6 |
 | **Release** | `tests/pkg/test_release.py`, `cycle_release.py` | `release.ps1`'s pre-flight checks on a throwaway git repo (default run): clean and untagged passes; uncommitted, untracked, already tagged or no version stops it. And with `-Only pkg`, a full `release.ps1 -DryRun -SkipTests` into a temp folder: the test-identity installer and a matching `.sha256`, optimised exes in `build\release`, the dev exes in `build\` untouched. | Windows + git (+ Inno Setup) |
 | **Real data** | `tests/realdata` | `.\test.ps1 -Only realdata` (not in the default run): the bundled and the dev Python run the extractor on your real DS3 install; the output must be identical. Skipped without the game. | Windows + the game |
-| **Python** | `tests/py` | `tools/ds3_archive.py` (name hash, RSA header decryption with a toy key, AES against the FIPS-197 vector, DCX, reading a synthetic archive), `tools/extract_treasures.py` (a synthetic MSB: treasure → part → collision → play region, the m40 Untended split, the nearest-region fallback, enemies), `tools/find_patterns.py` (references, unique patterns and their resolution on a synthetic PE image) and what goes into a release (`data/` holds only our own files, the licence, the installer's list). | Python 3.8+ (AES test: Windows) |
+| **Python** | `tests/py` | `tools/ds3_archive.py` (name hash, RSA header decryption with a toy key, AES against the FIPS-197 vector, DCX, reading a synthetic archive), `tools/extract_treasures.py` (a synthetic MSB: treasure → part → collision → play region, the m40 Untended split, the nearest-region fallback, enemies), `tools/find_patterns.py` (references, unique patterns and their resolution on a synthetic PE image), `tools/coop_test_partner.py` (its own reading and writing of the co-op code layout, the partner it makes, and, with the built exe, `wasd-cli coop` reading that partner's code) and what goes into a release (`data/` holds only our own files, the licence, the installer's list). | Python 3.8+ (AES test: Windows) |
 
 How the C++ tests reach the code: `tests/cpp/run_tests.cpp` includes
 `src/main.cpp` with `DS3_NO_MAIN` defined (which drops its `wmain`) and
@@ -187,6 +187,7 @@ output. None of them ever write to the game.
 |---|---|
 | `extract [--game <folder>]` | Reads item and enemy positions from your DS3 install into the map data (see "Where WASD keeps its files"). Exit codes: 0 done, 2 game folder not found, 3 no map archives there, 4 an archive couldn't be read, 5 no Python. |
 | `paths` | Prints where this copy reads its program files and writes your data (see "Where WASD keeps its files"), and whether it runs as a dev checkout or installed. UTF-8 output. |
+| `coop <code>` | Prints what a co-op code holds (character, level, HP/FP/stamina, map, region, bonfire, position, and the four flag sets with their list fingerprints), or why it's refused. No game needed. See "Co-op codes" below. |
 | `probe [--list-modules]` | Milestone-1 self-test: find the process, verify the Seamless Co-op marker, open a read-only handle, do 5 timed reads of the module's own PE header (`'MZ'`). Proves the mechanics without depending on any gameplay offset. Runs only when named (it was the default until 2026-10-07). |
 | `hp [iterations]` | Re-derives the HP pointer chain fresh every run and polls it at 10Hz, printing HP + read latency each time (default 100 reads, ~10s). |
 | `overlay` | **The main way to play with the guide**, and what runs when no command is given, e.g. when `wasd-cli.exe` is double-clicked. If a double-clicked run stops with an error, the window stays open until Enter (never when run from a terminal or script). A click-through HUD panel over the game window's top-right (game windowed or borderless) with only the critical hints: the spoiler tier with the nearest item, bosses done / total here, and boss weaknesses at the tier. It also serves the **live page**, a dashboard for a second monitor at http://localhost:8765 (this PC only), and opens it in your browser. It waits for the game and re-attaches after restarts. **F10** hides the overlay and pauses polling, **F11** shows perf figures, **F9** cycles the spoiler tier (also settable on the page). Ctrl+C exits. See "Live page" below. |
@@ -1374,11 +1375,31 @@ aren't saved, so quick checks don't leave clutter. `sessions/` and
 |---|---|
 | `start` | character, level, deathsTotal, playTimeMs, startedAt |
 | `enter` | area (on every area change) |
-| `death` | area, x, y, z, soulsLost, deathsTotal |
+| `death` | area, x, y, z, soulsLost, deathsTotal; `boss` and `bossName` when it was an attempt (see below) |
+| `boss` | flag, name, area, playTimeMs: a boss's defeat flag set during the session |
+| `gear` | slot (`R` / `L`), id, name, upgrade: the weapon in that hand, at the start and on every change |
 | `bloodstain` | souls recovered |
 | `level` | from, to |
 | `sample` | every 30s: level, souls, deathsTotal, area, playTimeMs |
 | `end` | seconds, deaths, gained, lost, recovered, level, deathsTotal, playTimeMs |
+
+`boss`, `gear` and a death's `boss` field are recorded from 2026-10-12
+on, by `overlay` and `WASD.exe` (not `stats --live`); older sessions don't
+have them, so the results page's boss and gear sections start from there.
+
+- **Boss kills:** every boss's defeat flag is read each tick (with the
+  live page's boss list). A flag that was clear on the last read and is
+  set now is a kill; flags already set when the session starts aren't.
+- **Attempts:** a death within `kBossFightRange` (70 m) of an undefeated
+  boss's place (its `enemies.tsv` position, in its area), the nearest one
+  that's open in the route, counts as an attempt at it. It's an
+  approximation: there's no live read of "a boss fight is on" yet, so a
+  death just outside an arena counts too.
+- **Weapons:** the weapon in the active right and left slot, its param id
+  (upgrade in the last two digits) and name.
+
+Not recorded: the boss's HP at each death (the handoff's attempt curve).
+That needs a live read of the boss's HP, which hasn't been found yet.
 
 **Perf figures (Milestone 5 stress test, 2026-10-07).** Beside each
 `.jsonl`, `overlay` and `stats --live` write `<stamp>.perf.csv`: one row
@@ -1403,20 +1424,94 @@ Archives' table) keeps characters apart, and will let a co-op partner's
 sessions merge in later. It read "Little John" live.
 
 **`report`** builds `reports/results.html` from `templates/results_template.html`
-plus every saved session, then opens it. It shows:
+plus every saved session, then opens it. Sessions are numbered S1 up,
+oldest first. In order, it shows:
 
-- headline tiles: time recorded, deaths (session and total), souls lost
-  and recovered, souls gained per hour, deadliest area
-- time per area and deaths per area (bars)
-- level over the game's own play-time clock, so it spans sessions
-- a death map per area: positions from above, equal x/z scales, with a
-  scale bar
-- the guide's own performance per session (see "Perf figures" above)
-- a sessions table
-- a player picker once more than one character is recorded
+- a header with **Character on this save** (each recorded character, with
+  its session count), **Spoilers: Off | Vague | Category | Full**, and
+  **Report for: You | Together | Partner** (Together and Partner need a
+  partner's code, see "Co-op codes"; the report switches in place). Spoilers is the
+  guide's one spoiler tier setting, the same as on the live page, the
+  overlay and F9, so a change on either page shows on the other within
+  its next poll (the live page polls every 0.5 s, this page every 2 s).
+  Only the served page has it. Nothing on this page depends on the tier:
+  your own results only show what you've done, and your partner's never
+  name anything you haven't reached.
+- tiles: time recorded (and in game), deaths (and across the
+  playthrough), deaths per hour, souls lost (and recovered), souls gained
+  (and per hour), longest session, deadliest area
+- the 3D area map: a list of the areas walked (first visited first), and
+  the trail in 3D coloured by height (blue-grey low, sand, gold high) on a
+  faint ground grid, deaths as ✕ and bonfire rests as ◆. Top-down (drag
+  pans) or Orbit (drag rotates, pitch 7° to 90°); right-drag or
+  Shift+drag always pans; the wheel and + / − zoom ×0.4 to ×6; height
+  ×1 to ×10, ×3 to start; Reset or a double-click goes back to top-down.
+  Orthographic, with a scale bar from above, and the view can't drift
+  away from the area.
+- time per area and deaths per area, both in the order first visited
+- bosses · attempts and kills: each boss you've killed, in kill order,
+  with a ✕ per death before the kill (attempts, see above), ✓, the time
+  from the first attempt to the kill and the session; then bosses you've
+  died at but not killed yet, named only at Full (dying near a boss's
+  place doesn't mean you've seen it), else "A boss in <area>"
+- firsts and records: first-try kills, fastest boss kill, toughest boss,
+  longest life (the longest stretch of a session without dying), cleanest
+  session (fewest deaths per hour, sessions of 1 h or more), best
+  levelling session, most souls in a session, first death
+- soul level against recorded play time (each session after the ones
+  before it), with ◇ at each boss kill
+- the areas visited across the playthrough: one track of recorded time,
+  coloured by area (each area keeps its colour in every report), with a
+  tick at each session
+- when you play: minutes played by weekday and hour, and a summary line
+  (busiest hour, typical start, latest finish, weekend share)
+- gear history: the weapon in each hand across recorded time, one block
+  per weapon, upgrades a lighter shade of the same weapon (a block is never thinner than
+  8 px, so a short stretch among hours of play still shows)
+- compare two sessions: A and B picked from chips, side by side with B's
+  difference (green when better; fewer deaths is better)
+- the sessions table, newest first, with the bosses killed in each
+- tool performance (see "Perf figures" above), collapsed to its one-line
+  verdict; open, one bar per session for poll rate, read latency (average
+  and worst), CPU and memory
 
-It's inline JS/SVG with no network, in light and dark themes, with hover
-tooltips. Colours and chart rules follow the dataviz reference palette.
+It's one self-contained page in the guide's Bonfire theme, with Windows
+system fonts, inline CSS and plain JS (charts are DOM and inline SVG, the
+map a 2D canvas), no network, and hover tooltips. Each section's figures
+come from a pure model function (`tilesModel`, `areaBars`, `levelModel`,
+`timelineModel`, `heatModel`, `compareModel`, ...) tested in `tests/js`.
+
+The live page's **Results** button (and the app window's "Results page",
+while the live page runs) opens the same page served by WASD at
+`/results` instead, built fresh from the sessions on each load. Served
+that way, its **Co-op codes** card works (Copy my code, Paste, Load,
+Clear partner) and, once a partner's code is loaded, the comparison of
+the two of you below it: see "Co-op codes". It polls `/api/coop` every
+2 s. A saved `results.html` can't reach WASD, so there the card only says
+to open it from the live page.
+
+Served by WASD, the page also **keeps itself current as you play**
+(`setupLive`). Every 5 s it asks `GET /api/sessions?have=<stamp>`.
+WASD answers with a stamp of the session files (`SessionsStamp`: each
+`.jsonl` and `.perf.csv` file's path, size and last write time, hashed),
+and with every session (`SessionsJson`, the array the page was built
+with) only when the stamp differs from `have`. An idle poll therefore
+reads no files. The page redraws in place when the sessions add anything
+(`sessionsKey`: each file with its event and perf row counts). It keeps
+the character, the report (You, Together, Partner), the scroll position,
+the open Tool performance section and the compare picks. Until you pick,
+compare follows the newest two. The map area's camera, zoom, pan and
+height are kept too; a map whose area has nothing new keeps its canvas
+and only updates the figures under its name. The page doesn't poll while
+the tab is hidden, which on Windows includes a browser window covered by
+the game, or in the middle of a drag on the map. It catches up when the
+tab is shown again.
+
+**Verified (2026-10-12):** with the game running and the test partner
+loaded, the page took in new events without a reload. In Together, Time
+recorded went from 4 h 28 m to 4 h 29 m, and the report, scroll position
+and the map's orbit view at ×1.25 zoom were all kept. An unchanged
+stamp got the stamp alone back.
 
 **Verified:** a real 2-minute session (Road of Sacrifices, warp to
 Irithyll, one death, bloodstain recovered) was saved with all 11 events.
@@ -1447,9 +1542,9 @@ on a blank background). Sessions also record:
 The placeholder (0, 1, 0) an unloaded character reads is skipped.
 
 The page draws each area's walked trail in 3D on a plain canvas, with no
-libraries. Paths are coloured by height (a sequential blue ramp, chosen
-separately for light and dark), with deaths and bonfire rests on top and
-hover tooltips. A trail is split into separate runs at area changes and
+libraries. Paths are coloured by height (blue-grey low, sand, gold
+high), over a faint ground grid, with deaths (✕) and bonfire rests (◆)
+on top and hover tooltips. A trail is split into separate runs at area changes and
 at jumps (warps and respawns: more than 25 units or 10 seconds).
 
 After a warp the position moves a few seconds before the area name, so
@@ -1463,13 +1558,15 @@ Views and controls:
 
 - It starts **top-down**, where an orthographic view makes distances
   true, with a scale bar.
-- The controls follow the common browser 3D convention (three.js
-  OrbitControls): **drag** to orbit, **right-drag or Shift+drag** to
-  pan, **scroll** to zoom toward the cursor, **double-click** or the
-  "Top-down" button to reset. Orbiting pivots on the centre of the
-  drawn area.
-- A **height slider** (×1 to ×10) on the map's right edge exaggerates
-  climbs, which look flat at true scale when tilted.
+- **Top-down | Orbit** switches the camera. Top-down, **drag** pans;
+  in Orbit, **drag** rotates (pitch 7° to 90°) around the centre of the
+  drawn area. **Right-drag or Shift+drag** always pans; **scroll** zooms
+  toward the cursor and **+ / −** zoom on the centre, ×0.4 to ×6.
+  **Reset** or a **double-click** goes back to top-down, zoom 1,
+  height ×3.
+- A **height slider** (×1 to ×10, ×3 to start) exaggerates climbs,
+  which look flat at true scale when tilted. The legend shows the
+  area's height range.
 - **Panning is limited** to the drawn area: the view's centre stays
   within 40 px of the area's box, and a box smaller than the view stays
   wholly on screen (user's request, 2026-10-07).
@@ -1478,7 +1575,9 @@ Checked by rendering a synthetic session (a spiral staircase, ramps,
 deaths and a bonfire) in headless Edge, top-down and tilted, in both
 themes. Then tried by hand on real data (2026-10-07: Firelink, High
 Wall): orbit, pan, zoom, reset, the height slider and the panning limit
-all work.
+all work. Restyled to the Bonfire design 2026-10-12 (area list, the
+camera switch, + / −, ×3 height) and checked in Chrome on real data:
+area picking, Orbit, zoom, the slider and Reset.
 
 **Co-op note (for the co-op work):** The Grand Archives' table also
 lists other connected players' names at
@@ -1737,6 +1836,14 @@ unpacked to disk or patched, and the archives are only opened for reading.
   (`h = h*37 + c`, lower case) and decrypts the file's AES-128-ECB ranges
   using Windows' own bcrypt.dll. It then inflates the DCX (DFLT = zlib).
   The format facts come from BinderTool (Atvaark, MIT).
+- The regulation file (`Data0.bdt`, the game's param tables) is
+  AES-256-CBC encrypted. Its key isn't stored in WASD. The extractor
+  reads it from the user's own `DarkSoulsIII.exe`, which holds it as a
+  plain 32-character string. It tries each such string (about 500) on
+  the file's first block, and the one that decrypts it to a DCX header
+  is the key. This takes about half a second. The RSA keys can't be read
+  the same way: they're inside the part of the exe that Steam's DRM
+  encrypts on disk, so they stay copied constants.
 - `tools/extract_treasures.py` parses the MSB3. Each `Treasure` event
   (type 4) names an ItemLotParam row and a map part, and the part's
   position is the pickup's. The layout facts come from SoulsFormats
@@ -1978,6 +2085,14 @@ and trims the overlay down to the critical lines.
   - `POST /api/tier?t=0..3`: the spoiler tier, the same setting as F9.
   - `POST /api/page?theme=a|b|c&muted=...`: the page's theme and muted
     panels (saved to `settings.ini`).
+  - `GET /api/coop/code` and `POST /api/coop/partner?code=...|clear=1`:
+    your co-op code, and your partner's; `GET /api/coop`: both of you
+    compared and the pair report's data (see "Co-op codes"), plus the
+    spoiler tier for the results page's Spoilers control.
+  - `/results`: the results page, built fresh from the saved sessions;
+    `GET /api/sessions?have=<stamp>`: the sessions again, only when
+    they've changed, so that page keeps itself current (see "Session
+    recording and the results page").
 - Nothing on the page can touch the game. The guide still only reads.
 - The polling worker **waits for the game**:
   - It lists processes every 2 seconds, then attaches through
@@ -2111,6 +2226,251 @@ MSVC.
   overflowing. The map mute, the whole-area item list (Firelink Shrine:
   8 unfound + 6 found = the 14 of the Items count) and the chip grid all
   work.
+
+## Co-op codes — built, not yet checked with a partner
+
+Two players running WASD in a Seamless Co-op session can compare their
+games side by side. For now they swap codes by hand, on the **results
+page** (the live page's **Results** button), the only page that shows
+co-op data. Its **Co-op codes** card has **Copy my code**, a box for the
+partner's code with **Paste** (from the clipboard, or Ctrl+V in the
+box), **Load** and **Clear partner**, and a status line. A code is a
+snapshot, so to update the comparison the partner sends a new one. A
+live link is meant to carry the same packets later.
+
+Once a partner's code is loaded, **Report for** offers two more
+reports, switched in place (you in cream, your partner in orchid,
+together in the Bonfire accent):
+
+**Partner:** their own report, from their code, in the same sections as
+yours: tiles, time and deaths per area, Bosses · attempts and kills,
+Firsts and records, soul level, the timeline, gear history, when they
+play, Compare two sessions and the sessions table. `partnerSummary` turns
+the code's data into the shape of your own summarised sessions. Not in a
+code, so not shown: their map, their tool performance, and their attempts
+at bosses they haven't killed yet. Their level line uses the game's own
+play-time clock, and the time inside a session is split evenly across its
+areas.
+
+**Together:** both of you in the same sections, plus:
+
+- **Played together:** the time your sessions overlapped, how many and
+  when, each player's recorded time and solo sessions, bosses felled
+  together (both kills inside the same overlap), deaths in the sessions
+  played together, and each one's share of play.
+- **Right now:** both players' cards (name, level, NG cycle, play time,
+  area and last bonfire, how old their code is, the distance and clock
+  direction on the same map section and world), Progress (bosses, key
+  items and items out of the game's total, deaths, play time, souls),
+  Character (soul level, attributes, max HP, FP and stamina) and key
+  items (who has which; ringed: still held).
+- Tiles with both values, time and deaths per area as paired bars (the times show over the row on hover, as they are too wide beside it), bosses
+  with a line per player (TOGETHER when felled together), records with
+  AHEAD on the better line (not for toughest boss or first death), both
+  level lines, a **joint timeline** (one column per day; lanes for your
+  solo play, together, and theirs) with each player's areas-visited strip
+  under it, both gear histories, both heatmaps
+  on one scale.
+- **Who found what:** world pickups per area (you, your partner, both,
+  only one), boss kills split into felled together, both separately,
+  only you, only them, and how many items only one of you has (theirs
+  not named).
+- Compare two sessions picks from both players' sessions (Y·S3, P·S2);
+  the sessions table merges sessions played together into one Together
+  row.
+- Your map (with a note that their trail needs the live link) and your
+  tool performance.
+
+**Your partner's data follows the live page's spoiler rules** for the
+same data, at your spoiler tier (user's call, 2026-10-12): what you've
+reached is named at every tier, everything is named at Full, and below
+Full the rest is shown the way the live page shows what you haven't
+reached yet:
+
+- A boss is named once you've defeated it, a key item once you have it,
+  and every one at Full. Below Full, their others are unnamed rows, summed
+  into one line ("2 more bosses you haven't reached yet, not named: Isolde
+  has 1 of them"), without their area. Names come from your own boss list
+  (`bosses.tsv` until WASD has read your game), and only when your
+  partner's list is the same one (its fingerprint), so another WASD
+  version can't put wrong names on them.
+- An area counts as reached when you're there now or have recorded time,
+  an item found or a boss defeated there (`CoopReachedAreas`). Below
+  Full, your partner's time, deaths and items in other areas are summed as
+  "Other areas".
+- Your partner's location (area, region, bonfire), as the route hints
+  show places (`CoopPlaceView`): named in an area you've reached and at
+  Full; at Category "In a new area beyond <the area it opens from>"
+  (`route.tsv`); at Off and Vague "Somewhere you haven't been yet".
+- Their weapons (gear history, sessions) are named if you've held the
+  same weapon in a recorded session, and at Full; else "A weapon you
+  haven't found".
+- World pickups are never named from your partner's side, only counted.
+
+WASD applies this before anything reaches the page: below Full,
+`/api/coop` carries no name for something you haven't reached. The page
+redraws when you change the tier. Your partner's WASD
+does the same with your code. Comparing needs your own lists from the
+game: until you're in game, only your partner's figures show, with none
+of their areas named.
+
+What doesn't change:
+
+- **No game data and no memory layout.** A code only carries values the
+  tool already shows, in its own format.
+- **Nothing is sent anywhere.** The code exists only in your clipboard.
+  The partner's state is kept in memory and is gone after a restart, and
+  it never mixes with your own reads.
+
+How the code is built:
+
+- The overlay's poll loop keeps your state in `g_coop.mine`. Values like
+  HP, attributes and position update every tick. The four flag sets and
+  the NG cycle update every 5 s, and only while a page is open:
+  `ReadMyCoopFlags` reads about 1,000 pickup flags.
+- The recorded part (time and deaths per area, level over play time) is
+  summed from your character's saved sessions by `SummariseCoopSessions`,
+  at most every 30 s.
+- `GET /api/coop/code` encodes that state when you click Copy.
+- `POST /api/coop/partner` decodes a pasted code on the spot and refuses
+  it with a reason, never half of one.
+- `GET /api/coop` builds the comparison on request (`BuildCoopCompare`, a
+  pure function) and fills in area and bonfire names (your partner's only
+  where you've been). Its `pair` part is the pair report's data
+  (`BuildCoopPair`, pure): each player's totals, sessions (start, length,
+  deaths, souls, levels, areas, kills, weapons), boss kills and two
+  records, and the sessions played together (`CoopSessionsTogether`: each
+  pair of sessions whose times overlap, touching isn't overlapping, with
+  the overlap). Your partner's areas, bosses and weapons follow the
+  no-spoil rule: an area you've reached, a boss you've defeated, a weapon
+  you've held in a recorded session (any infusion or upgrade of it);
+  otherwise "Other areas" or no name. Their counts, times and levels are
+  always there.
+
+### The packet (protocol 1)
+
+Everything is little-endian. The header is 6 bytes:
+
+| Bytes | Field |
+|---|---|
+| 0 | protocol version, `1` |
+| 1 | message type: 1 Hello, 2 FullSnapshot, 3 Delta, 4 Heartbeat, 5 RequestFullSnapshot, 6 Disconnect (only 2 is used yet) |
+| 2-5 | sequence number, u32 |
+
+The FullSnapshot payload follows, bit-packed. Each field's bits are
+written least significant first, into each byte from its lowest bit.
+
+| Field | Bits |
+|---|---|
+| captured at, Unix seconds UTC | 32 |
+| character name: length n in bytes of UTF-8 (at most 48), then n bytes | 6 + 8n |
+| soul level, HP, max HP, FP, max FP, stamina, max stamina | 7 × 16 |
+| attributes: Vigor, Attunement, Endurance, Vitality, Strength, Dexterity, Intelligence, Faith, Luck | 9 × 8 |
+| souls held, deaths (the game's counter), play time in seconds | 3 × 32 |
+| NG cycle (0 = the first journey) | 8 |
+| map id (`mAA_BB_CC_DD` packed as `0xAABBCCDD`), play region id, last bonfire id (two's complement) | 3 × 32 |
+| position known; if 1, x, y, z, facing in radians (IEEE 754 single) | 1 (+ 4 × 32) |
+| 4 flag sets: bosses defeated, key items obtained, key items held, world pickups found. Each: list fingerprint (32), count (12), then count bits | 4 × (44 + count) |
+| recorded per area: area list fingerprint (32), count n (6), then per area: index in the list (6), seconds (24), deaths (16) | 38 + 46n |
+| level over play time: count n (6, at most 32), then per point: play time in minutes (20), level (10) | 6 + 30n |
+| recorded totals: seconds, deaths, souls lost, souls recovered, souls gained, longest session in seconds | 6 × 32 |
+| sessions, newest first: count n (6, at most 40), area bits m (6: the area list's size), weapons w (1); per session: start in Unix minutes (28), length in minutes (12), deaths (12), souls gained (24), level at start and at end (2 × 10), the areas visited (m bits), bosses killed (6), and if w: the weapon held longest in the main hand, param id / 100 (18), its upgrade (5), then the off hand the same (23) | 13 + n × (124 + m + 46w) |
+| boss records, one per boss killed in a recorded session: count n (6); per record: index in the boss list (6), deaths before the kill (10), minutes from the first attempt to the kill (16; 65535: no attempts), its session (6: an index into the sessions above; 63: not among them), kill time in Unix minutes (28) | 6 + 66n |
+| records: the longest life in seconds (24), its session (6) and area (6), 63 for none; the first death, in seconds of recorded time (24; 16777215: none), its session (6) and area (6) | 72 |
+| zero bits to the end of the byte, and nothing after | 0-7 |
+
+Each flag set follows one of the tool's lists:
+
+- `bosses.tsv` in file order (each boss's defeat flag).
+- `key_items.tsv`, one entry per name, as `keys` shows them.
+- Every world pickup of the current journey, in the order the tool groups
+  them (each pickup's flag).
+
+The fingerprint is FNV-1a (32-bit) over the list's length, then each id,
+each as 4 little-endian bytes. A receiver only compares a set when its
+own list has the same fingerprint. Otherwise it shows the partner's count
+with a note that the lists differ: a different WASD version, game version
+or NG cycle.
+
+The area list is `region_areas.tsv`'s area names, sorted; its fingerprint
+uses each name's FNV-1a hash as the id. Only areas with recorded time or
+deaths are sent, in the order first visited. Session start times are the
+sessions' local `startedAt` turned into UTC on the sender's PC, so two
+players' sessions line up. A receiver works out the rest of the pair
+report from the sessions and boss records (sessions played together,
+first-try and fastest kills, cleanest session and so on); the code only
+carries the records it couldn't. The level points are each `sample` and `end` event's
+level, kept where it changes, then thinned evenly to 32 (the first and
+last kept). Values wider than their field are clamped, not wrapped.
+
+### The text form
+
+`WASD-` followed by base64url (RFC 4648 §5, no padding) of the packet
+plus its CRC-32 (the zlib one, little-endian). A full game's code is
+about 1,750 characters: the pickup flags, 40 sessions and the bosses.
+It's kept to 2,000 characters, one chat message (Discord's limit), by
+`FitCoopCode`: if the whole state doesn't fit, the weapons per session go
+first, then the oldest sessions, one at a time. `GET /api/coop/code`
+reports what was left out (`leftOut`) and the page says so after Copy.
+Whitespace anywhere is ignored,
+since chat apps wrap long lines. The decoder refuses each of these with
+its own reason:
+
+- a missing prefix;
+- a bad character or a wrong checksum ("damaged");
+- another protocol version ("both of you need the same version");
+- an unknown or non-snapshot message type;
+- a truncated payload, extra bytes or set padding bits;
+- a name longer than 48 bytes or with control characters;
+- a position that isn't a finite number;
+- an area listed twice, or more than 32 level points;
+- more than 40 sessions, or a record naming a session that isn't there;
+- a packet over 2,048 bytes.
+
+`wasd-cli.exe coop <code>` prints what a code holds.
+
+### Adding a field
+
+A released layout never changes: uploaded or saved codes must stay
+readable. To add a field, add it to `SharedGameState` and write a new
+layout under protocol 2. Decoding stays strict: a receiver refuses
+versions it doesn't know rather than guessing. Anything that identifies a
+player, such as the character name, is marked as such in
+`SharedGameState`, so that anything recording these states can strip it.
+
+### A test partner without a partner
+
+`tools/coop_test_partner.py` makes a believable partner from your own
+code, so the co-op reports can be tried alone. With WASD running and you
+in the game (the results page open a few seconds), it fetches your code
+from `/api/coop/code`, changes it and loads it as your partner's code:
+
+    python -I tools/coop_test_partner.py            # load it into WASD
+    python -I tools/coop_test_partner.py --print    # only print the code
+
+The partner has your lists, so everything compares, and differs from you
+in each: about a quarter of the world pickups you haven't found are
+theirs and a tenth of yours aren't; two key items you haven't obtained
+(one held) and one of yours not; the first boss you haven't defeated
+(with a kill record) and not your last kill; their two newest sessions
+start when yours did and run 30 minutes longer (so they overlap however
+short yours were), the others are a day or more earlier; a
+their own time (×0.5 to ×1.6 of yours) and deaths in each area; their own level curve (your clock stretched to their longer play time, pulling ahead to their 5 more levels); their own weapons in every session (Broadsword, then Claymore; Grass Crest Shield, then Lothric Knight Shield); a shorter longest life, a later first death and 2 more levels in their newest session; a few more deaths and souls. `--name` and `--seed` change who and
+which. It reads and writes the code layout in Python, independently of
+the C++, so it's also a check of the layout (its tests cross-check the two
+when the exe is built).
+
+### Still to check
+
+With two real players:
+
+- Copy, paste and Load both ways, on the results page.
+- The partner's area and bonfire names.
+- Their attributes, deaths, play time and NG cycle against their game.
+- Time and deaths per area against their own results page.
+- The distance and clock direction when standing near each other.
+- The boss, key-item and item comparisons against what each of you
+  actually has.
 
 ## Route hints — built, checked on a new game
 

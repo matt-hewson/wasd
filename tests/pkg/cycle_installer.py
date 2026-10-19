@@ -13,10 +13,14 @@ import ctypes
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
 import winreg
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from test_static import version_h  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ISS = os.path.join(ROOT, "installer", "wasd.iss")
@@ -25,6 +29,9 @@ UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\%s_is1" % 
 SHORTCUT = os.path.join(os.environ.get("APPDATA", ""), r"Microsoft\Windows\Start Menu\Programs", "WASD (test).lnk")
 TEST_DATA = os.path.join(os.environ.get("LOCALAPPDATA", ""), "WASD (test)")  # what a test uninstall may remove
 FULL_NAME = "WASD: World Awareness & State Display"
+VERSION = version_h()["WASD_VERSION_STRING"]
+# The upgrade test's "newer" build: one patch above.
+NEXT_VERSION = "%d.%d.%d" % (version_h()["WASD_VERSION_MAJOR"], version_h()["WASD_VERSION_MINOR"], version_h()["WASD_VERSION_PATCH"] + 1)
 
 EXPECTED_FILES = sorted([
     "LICENSE.txt", "README.txt", "unins000.dat", "unins000.exe",
@@ -117,8 +124,8 @@ class InstallerCycleTest(unittest.TestCase):
             if not os.path.exists(need):
                 raise unittest.SkipTest("%s missing: run test.ps1 -Only pkg (it builds and fetches)" % need)
         cls.out = tempfile.mkdtemp(prefix="wasd setups ")
-        cls.setup, cls.setup_next = (os.path.join(cls.out, "WASD-test-%s-setup.exe" % v) for v in ("0.1.0", "0.1.1"))
-        for extra in ([], ["/DVersionOverride=0.1.1"]):
+        cls.setup, cls.setup_next = (os.path.join(cls.out, "WASD-test-%s-setup.exe" % v) for v in (VERSION, NEXT_VERSION))
+        for extra in ([], ["/DVersionOverride=" + NEXT_VERSION]):
             r = subprocess.run([iscc(), "/Q", "/DTestBuild", "/DBinDir=" + bin_dir, *extra, "/O" + cls.out, ISS],
                                capture_output=True, text=True)
             if r.returncode != 0:
@@ -158,7 +165,7 @@ class InstallerCycleTest(unittest.TestCase):
         v = reg_values()
         self.assertIsNotNone(v, "no uninstall entry under HKCU (what Settings -> Apps lists)")
         self.assertEqual(v["DisplayName"], FULL_NAME + " (test)")
-        self.assertEqual(v["DisplayVersion"], "0.1.0")
+        self.assertEqual(v["DisplayVersion"], VERSION)
         self.assertEqual(v["Publisher"], "AmishGoose")
         self.assertEqual(v["DisplayIcon"], os.path.join(self.dir, "bin", "WASD.exe"))
         self.assertEqual(v["InstallLocation"], self.dir + "\\")
@@ -174,7 +181,7 @@ class InstallerCycleTest(unittest.TestCase):
         self.assertEqual(aumid, "AmishGoose.WASD")  # pinned shortcut + running window = one taskbar button
 
         r = self.run_installed("wasd-cli.exe", "--version")
-        self.assertEqual(r.stdout.decode().strip(), FULL_NAME + " 0.1.0")
+        self.assertEqual(r.stdout.decode().strip(), FULL_NAME + " " + VERSION)
         r = self.run_installed("WASD.exe", "--smoke-test")
         self.assertEqual(r.returncode, 0, r.stdout.decode())
         r = self.run_installed("wasd-cli.exe", "paths")
@@ -188,7 +195,7 @@ class InstallerCycleTest(unittest.TestCase):
             f.write("spoiler_tier=Full\n")
         self.assertEqual(self.install(self.setup_next), 0)  # no /DIR: it finds the previous folder itself
         v = reg_values()
-        self.assertEqual(v["DisplayVersion"], "0.1.1")
+        self.assertEqual(v["DisplayVersion"], NEXT_VERSION)
         self.assertEqual(v["InstallLocation"], self.dir + "\\")
         self.assertEqual(files_under(self.dir), EXPECTED_FILES)
         self.assertTrue(os.path.exists(marker), "the upgrade touched your data")

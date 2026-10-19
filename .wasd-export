@@ -26,6 +26,7 @@ test.ps1
 tests/cpp/check.h
 tests/cpp/run_tests.cpp
 tests/cpp/test_app.cpp
+tests/cpp/test_coop.cpp
 tests/cpp/test_data.cpp
 tests/cpp/test_entry.cpp
 tests/cpp/test_formulas.cpp
@@ -47,11 +48,13 @@ tests/pkg/test_extract.py
 tests/pkg/test_paths.py
 tests/pkg/test_release.py
 tests/pkg/test_static.py
+tests/py/test_coop_test_partner.py
 tests/py/test_find_patterns.py
 tests/py/test_release_files.py
 tests/py/test_tools.py
 tests/realdata/test_realdata.py
 tests/shared/ds3_fixtures.py
+tools/coop_test_partner.py
 tools/ds3_archive.py
 tools/extract_treasures.py
 tools/fetch_python.ps1

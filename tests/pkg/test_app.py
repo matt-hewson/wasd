@@ -16,9 +16,13 @@ import ctypes.wintypes as wt
 import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 import unittest
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from test_static import version_h  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.path.join(ROOT, "build", "WASD.exe")
@@ -103,7 +107,7 @@ class RunningAppTest(unittest.TestCase):
         self.assertRegex(logs[0], r"^wasd-\d{8}\.log$")
         with open(os.path.join(self.user, "logs", logs[0]), encoding="utf-8", errors="replace") as f:
             log = f.read()
-        for line in ("WASD: World Awareness & State Display 0.1.0", "Your data: " + self.user,
+        for line in ("WASD: World Awareness & State Display " + version_h()["WASD_VERSION_STRING"], "Your data: " + self.user,
                      "Live page: http://localhost:", "Quit from the WASD window.", "Closed."):
             self.assertIn(line, log)
 

@@ -18,6 +18,7 @@
 #include <map>
 
 #include "test_app.cpp"
+#include "test_coop.cpp"
 #include "test_data.cpp"
 #include "test_entry.cpp"
 #include "test_formulas.cpp"

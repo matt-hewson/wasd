@@ -35,6 +35,7 @@ against DS3's own msg/engus/*.msgbnd.dcx (in Data1):
 import base64
 import ctypes
 import os
+import re
 import struct
 import zlib
 
@@ -282,11 +283,33 @@ def read_fmg(data):
 #
 # Data0.bdt is not an archive like the others: it is the regulation file, a
 # DCX-compressed BND4 of .param tables, AES-256-CBC encrypted. The first 16
-# bytes are the IV. Key from BinderTool's DecryptionKeys.cs
-# (RegulationFileKeyDs3, MIT licence), checked to decrypt the game's own
-# Data0.bdt to a DCX container.
+# bytes are the IV. The key is not stored here: the game's exe holds it as
+# a plain 32-character string, and regulation_key finds it by trying each
+# such string in the exe on the file's first block (about 500 candidates in
+# DS3 1.15.2) until one decrypts to a DCX header.
 REGULATION_FILE = "Data0.bdt"
-REGULATION_KEY = b"ds3#jn/8_7(rsY9pg55GFN7VFL#+3n/)"
+GAME_EXE = "DarkSoulsIII.exe"
+_KEY_CANDIDATE = re.compile(rb"(?<=\0)[\x21-\x7e]{32}(?=\0)")
+_regulation_keys = {}
+
+
+def regulation_key(game_dir, head):
+    """The regulation file's AES-256 key, read from the game's exe. head is
+    the file's first 32 bytes (IV and first block). Cached per game folder."""
+    folder = os.path.abspath(game_dir)
+    if folder not in _regulation_keys:
+        exe = os.path.join(game_dir, GAME_EXE)
+        if not os.path.exists(exe):
+            raise ValueError("no %s to read the regulation key from" % GAME_EXE)
+        with open(exe, "rb") as f:
+            data = f.read()
+        for m in _KEY_CANDIDATE.finditer(data):
+            if _aes_cbc_decrypt(m.group(), head[:16], head[16:32])[:4] == b"DCX\0":
+                _regulation_keys[folder] = m.group()
+                break
+        else:
+            raise ValueError("no key in %s decrypts %s" % (GAME_EXE, REGULATION_FILE))
+    return _regulation_keys[folder]
 
 
 def read_regulation(game_dir):
@@ -295,7 +318,7 @@ def read_regulation(game_dir):
         raw = f.read()
     if len(raw) < 32 or (len(raw) - 16) % 16:
         raise ValueError("%s is not an encrypted regulation file (%d bytes)" % (REGULATION_FILE, len(raw)))
-    plain = _aes_cbc_decrypt(REGULATION_KEY, raw[:16], raw[16:])
+    plain = _aes_cbc_decrypt(regulation_key(game_dir, raw), raw[:16], raw[16:])
     if plain[:4] != b"DCX\0":
         raise ValueError("%s did not decrypt to a DCX container" % REGULATION_FILE)
     return read_bnd4(dcx_decompress(plain))

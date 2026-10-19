@@ -358,13 +358,26 @@ class RegulationTest(unittest.TestCase):
             self.assertEqual(ds3_archive.read_regulation(tmp), self.FILES)
 
     @unittest.skipUnless(os.name == "nt", "AES comes from Windows")
-    def test_wrong_key_or_size_is_refused(self):
+    def test_key_is_found_in_the_exe(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ds3_fixtures.write_regulation(tmp, self.FILES)
+            with open(os.path.join(tmp, ds3_archive.REGULATION_FILE), "rb") as f:
+                head = f.read(32)
+            self.assertEqual(ds3_archive.regulation_key(tmp, head), ds3_fixtures.REGULATION_KEY)
+
+    @unittest.skipUnless(os.name == "nt", "AES comes from Windows")
+    def test_wrong_key_no_exe_or_size_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            ds3_fixtures.write_regulation(tmp, self.FILES, key=b"k" * 32)  # the exe holds a different key
+            with self.assertRaisesRegex(ValueError, "no key in DarkSoulsIII.exe"):
+                ds3_archive.read_regulation(tmp)
+        with tempfile.TemporaryDirectory() as tmp:
+            ds3_fixtures.write_regulation(tmp, self.FILES)
+            os.remove(os.path.join(tmp, ds3_archive.GAME_EXE))
+            with self.assertRaisesRegex(ValueError, "no DarkSoulsIII.exe"):
+                ds3_archive.read_regulation(tmp)
         with tempfile.TemporaryDirectory() as tmp:
             path = os.path.join(tmp, ds3_archive.REGULATION_FILE)
-            with open(path, "wb") as f:
-                f.write(bytes(16) + ds3_fixtures.aes_cbc_encrypt(b"k" * 32, bytes(16), make_dcx(b"BND4") + bytes(8)))
-            with self.assertRaisesRegex(ValueError, "did not decrypt"):
-                ds3_archive.read_regulation(tmp)
             with open(path, "wb") as f:
                 f.write(bytes(40))
             with self.assertRaisesRegex(ValueError, "not an encrypted regulation"):

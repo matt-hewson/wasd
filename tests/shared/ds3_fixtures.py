@@ -234,14 +234,26 @@ def aes_cbc_encrypt(key, iv, data):
     return outb.raw[:got.value]
 
 
-def write_regulation(folder, files, iv=bytes(range(16))):
+# Toy regulation key, and a fake exe holding it among other 32-character
+# strings, as the game's exe holds the real one.
+REGULATION_KEY = b"wasd-toy-regulation-key-32bytes!"
+
+
+def write_exe(folder, key=REGULATION_KEY):
+    decoys = [b"%032d" % i for i in range(3)] + [b"x" * 31, b"y" * 33]
+    with open(os.path.join(folder, ds3_archive.GAME_EXE), "wb") as f:
+        f.write(b"MZ\0" + b"\0".join(decoys[:3] + [key] + decoys[3:]) + b"\0")
+
+
+def write_regulation(folder, files, iv=bytes(range(16)), key=REGULATION_KEY):
     """Data0.bdt as the game ships it: BND4 of files [(id, name, bytes)],
-    DCX-compressed, AES-256-CBC encrypted with the regulation key, the IV
-    first. Windows only (AES)."""
+    DCX-compressed, AES-256-CBC encrypted with the toy key, the IV first;
+    plus the fake exe holding the key. Windows only (AES)."""
     plain = make_dcx(make_bnd4(files))
     plain += b"\0" * (-len(plain) % 16)
     with open(os.path.join(folder, ds3_archive.REGULATION_FILE), "wb") as f:
-        f.write(iv + aes_cbc_encrypt(ds3_archive.REGULATION_KEY, iv, plain))
+        f.write(iv + aes_cbc_encrypt(key, iv, plain))
+    write_exe(folder)
 
 
 def write_archive(folder, name, files):
