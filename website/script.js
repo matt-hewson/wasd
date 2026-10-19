@@ -1,1 +1,0 @@
-console.log("WASD website loaded.");
