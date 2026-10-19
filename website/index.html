@@ -42,7 +42,11 @@
         <li><a href="#support">Support</a></li>
       </ul>
     </nav>
-    <a class="top-dl" href="https://github.com/matt-hewson/wasd/releases">Download</a>
+    <a class="top-dl" target="_blank" href="https://github.com/matt-hewson/wasd/releases">Download</a>
+    <a class="top-kofi" target="_blank" href="https://ko-fi.com/wasdcompanion" rel="noopener" aria-label="Donate: buy me a coffee on Ko-fi">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 10h12c.2 4.6-1.4 8.6-6 8.6s-6.2-4-6-8.6zM16.4 11.6c2-.3 3 .6 2.7 2s-1.6 2-3.4 1.9M9 7.5c-.9-1 .8-1.7-.1-2.8M12.5 7.5c-.9-1 .8-1.7-.1-2.8"/></svg>
+      <span class="t">Donate</span>
+    </a>
   </div>
 </header>
 
@@ -88,9 +92,8 @@
     </div>
 
     <div class="hero-shot">
-      <figure class="shot">
-        <!-- Replace with: <img src="img/live-bonfire.webp" width="1600" height="1000" alt="The WASD live page in the Bonfire theme: character stats, nearby unfound items with distance and direction, and a map of the trail with death marks." fetchpriority="high"> -->
-        <figcaption class="ph"><b>Screenshot · live page, Bonfire theme</b>1600 × 1000, WebP. Character, nearby items, trail map.</figcaption>
+      <figure class="shot screen">
+        <img src="img/live-bonfire.webp" width="1920" height="953" alt="The WASD live page in the Bonfire theme at spoiler tier Category: character stats on the left, bosses and a map of the trail in the middle, and a numbered list of nearby unfound items with direction and distance on the right." fetchpriority="high">
       </figure>
     </div>
   </div>
@@ -181,19 +184,24 @@
 
     <article class="surface" aria-labelledby="s-live">
       <div class="surface-media">
-        <figure class="shot">
-          <!-- <img src="img/live-bonfire.webp" width="1600" height="1000" alt="..." loading="lazy"> -->
-          <figcaption class="ph"><b>Screenshot · live page</b>Second-monitor dashboard at localhost:8765</figcaption>
-        </figure>
-        <span class="pin" style="left:14%;top:18%;--ang:-30deg;--len:40px" aria-hidden="true">1</span>
-        <span class="pin" style="left:62%;top:22%;--ang:20deg;--len:44px" aria-hidden="true">2</span>
-        <span class="pin" style="left:30%;top:62%;--ang:150deg;--len:36px" aria-hidden="true">3</span>
-        <span class="pin" style="left:80%;top:66%;--ang:-20deg;--len:40px" aria-hidden="true">4</span>
+        <div class="pinned">
+          <figure class="shot screen">
+            <img src="img/live-bonfire.webp" width="1920" height="953" alt="The WASD live page in High Wall of Lothric. Character panel with HP, FP, stamina, equip load and stats; the bosses here; a map of the trail with numbered item markers; nearby unfound items listed by kind, direction and distance; and gear, route and missable panels along the bottom." loading="lazy">
+          </figure>
+          <span class="pin" style="left:7.8%;top:61%;--ang:-90deg;--len:40px" aria-hidden="true">1</span>
+          <span class="pin" style="left:81.7%;top:31.5%;--ang:0deg;--len:26px" aria-hidden="true">2</span>
+          <span class="pin" style="left:31.8%;top:44%;--ang:-90deg;--len:70px" aria-hidden="true">3</span>
+          <span class="pin" style="left:57.3%;top:27.3%;--ang:45deg;--len:50px" aria-hidden="true">4</span>
+          <span class="pin" style="left:10.4%;top:76.2%;--ang:90deg;--len:18px" aria-hidden="true">5</span>
+          <span class="pin" style="left:52%;top:83%;--ang:180deg;--len:40px" aria-hidden="true">6</span>
+        </div>
         <ol class="legend" aria-label="What the numbered markers point to">
           <li>Your character: HP, FP, stamina, equip load and roll tier, and what one more point in each stat would give you.</li>
           <li>Unfound items, numbered, with a direction arrow, distance and height.</li>
-          <li>Gear with real attack rating, and the bosses here with their weaknesses.</li>
+          <li>The bosses here, with their weaknesses.</li>
           <li>The map of your trail, with deaths and bonfire rests.</li>
+          <li>Your gear, with real attack rating and what its next upgrade needs.</li>
+          <li>Route and progress, plus missable warnings for questline steps that you could get locked out of.</li>
         </ol>
       </div>
       <div class="item">
@@ -222,18 +230,16 @@
         <p class="body" style="margin-top:16px;color:var(--muted);font-size:15px"><kbd style="height:24px;min-width:30px;font-size:12px">F10</kbd> doesn't just hide it: WASD stops reading the game entirely until you press it again.</p>
       </div>
       <div class="surface-media">
-        <figure class="shot wide">
-          <!-- <img src="img/overlay.webp" width="1600" height="900" alt="..." loading="lazy"> -->
-          <figcaption class="ph"><b>Screenshot · overlay in game</b>Crop to the corner panel, 1600 × 900</figcaption>
+        <figure class="shot" style="aspect-ratio:844/533">
+          <img src="img/overlay.webp" width="844" height="533" alt="The WASD overlay in the top-left corner of Dark Souls III, at spoiler tier Category. It reads: 9 m, 12 o'clock: a consumable. Bosses 0 / 1 defeated here (+1 later). Route: High Wall of Lothric: a required boss is still alive." loading="lazy">
         </figure>
       </div>
     </article>
 
     <article class="surface" aria-labelledby="s-results">
       <div class="surface-media">
-        <figure class="shot">
-          <!-- <img src="img/results.webp" width="1600" height="1000" alt="..." loading="lazy"> -->
-          <figcaption class="ph"><b>Screenshot · results page</b>Session report with the 3D trail</figcaption>
+        <figure class="shot" style="aspect-ratio:1324/787">
+          <img src="img/results.webp" width="1324" height="787" alt="Part of the WASD results page: a row of totals (16 minutes recorded, no deaths, no souls lost, longest session 0:16), then the area map, with the areas visited listed on the left and a top-down trail through High Wall of Lothric, shaded by height and marked with three bonfire rests." loading="lazy">
         </figure>
       </div>
       <div class="item">
@@ -251,17 +257,17 @@
     <div class="themes" aria-labelledby="themes-title">
       <div class="themes-h">
         <h3 id="themes-title">Three themes for the live page</h3>
-        <p>Pick in settings. Same numbers, different layout.</p>
+        <p>Pick in the header. Same numbers, different layout.</p>
       </div>
       <div class="theme"><figure>
-        <div class="shot tall"><!-- <img src="img/theme-bonfire.webp" alt="..." loading="lazy"> --><p class="ph"><b>Bonfire</b>Live page screenshot</p></div>
+        <div class="shot screen"><img src="img/live-bonfire.webp" width="1920" height="953" alt="The full live page in the Bonfire theme: warm brown panels with serif headings, character on the left, bosses and the map in the middle, and the Nearby list on the right." loading="lazy"></div>
         <figcaption><b>Bonfire</b><span>Warm, serif, atmospheric. The default.</span></figcaption></figure></div>
       <div class="theme"><figure>
-        <div class="shot tall"><!-- <img src="img/theme-ledger.webp" alt="..." loading="lazy"> --><p class="ph"><b>Ledger</b>Live page screenshot</p></div>
+        <div class="shot screen"><img src="img/theme-ledger.webp" width="1920" height="953" alt="The full live page in the Ledger theme: cool grey-blue panels with monospace numbers, stats in a strip along the top, a long table of nearby items on the left, bosses and gear in the middle, and the map and route on the right." loading="lazy"></div>
         <figcaption><b>Ledger</b><span>Cool and dense, with monospace numbers.</span></figcaption></figure></div>
       <div class="theme"><figure>
-        <div class="shot tall"><!-- <img src="img/theme-cartographer.webp" alt="..." loading="lazy"> --><p class="ph"><b>Cartographer</b>Live page screenshot</p></div>
-        <figcaption><b>Cartographer</b><span>The map fills the screen; panels float over it.</span></figcaption></figure></div>
+        <div class="shot screen"><img src="img/theme-cartographer.webp" width="1920" height="953" alt="The full live page in the Cartographer theme: the map fills the screen with a glowing blue trail and gold item markers, with character, bosses, nearby items and missables in panels floating over it." loading="lazy"></div>
+        <figcaption><b>Cartographer</b><span>The map fills the screen, panels float over it.</span></figcaption></figure></div>
     </div>
 
     <div class="also">
