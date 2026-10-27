@@ -37,6 +37,7 @@
         <li><a href="#shows">What it shows</a></li>
         <li><a href="#safety">Safety</a></li>
         <li><a href="#install">Install</a></li>
+        <li><a href="#status">Known bugs</a></li>
         <li><a href="#coop">Co-op &amp; next</a></li>
         <li><a href="#about">About</a></li>
         <li><a href="#support">Support</a></li>
@@ -392,7 +393,69 @@
 
 <hr class="rule">
 
-<!-- 6. Co-op & next -->
+<!-- 6. Known bugs & coming features -->
+<section class="sec" id="status" aria-labelledby="status-title">
+  <div class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow">Honest status</p>
+      <h2 id="status-title">Known bugs and what's coming</h2>
+      <p>WASD is a pre-release. Here's what I know is wrong right now, and what's planned but not built yet.</p>
+    </div>
+    <div class="status-grid">
+      <div>
+        <h3 class="status-h">Known bugs</h3>
+        <p class="status-sub">In v0.1.1, the current release.</p>
+        <dl class="issues">
+          <div><dt><span>Co-op: as the joining player, your own pickups may not show as found <span class="tag">Open</span></span></dt>
+            <dd>When your partner hosts the Seamless Co-op session, your WASD may not mark the items you pick up. The host's copy is fine.</dd></div>
+          <div><dt><span>Resting at the same bonfire again isn't recorded <span class="tag">Open</span></span></dt>
+            <dd>A rest is noticed when your last bonfire changes, so resting at the same one again adds no map marker and no session entry.</dd></div>
+          <div><dt><span>Item Discovery can be wrong after relaunching the game <span class="tag">Open</span></span></dt>
+            <dd>The figure can go wrong once you close and reopen Dark Souls III.</dd></div>
+          <div><dt><span>Updates slower and uses more CPU than it should <span class="tag">Open</span></span></dt>
+            <dd>It aims for 10 updates a second with very little overhead. Right now it manages about 6, using roughly half of one CPU core.</dd></div>
+          <div class="fixed"><dt><span>Co-op codes pasted into Discord can break <span class="tag">Fixed in the next release</span></span></dt>
+            <dd>Discord's formatting eats some of the code's underscores. Until then, paste it inside a code block (three backticks either side) or send it as a .txt file.</dd></div>
+          <div class="fixed"><dt><span>Copy my code can fail without saying so <span class="tag">Fixed in the next release</span></span></dt>
+            <dd>If it does, your clipboard still holds whatever was there before, often your partner's code. Check the line under the button says "Copied".</dd></div>
+          <div class="fixed"><dt><span>Switching characters mid-session records into the first one's history <span class="tag">Fixed in the next release</span></span></dt>
+            <dd>Restart WASD after switching characters until then.</dd></div>
+        </dl>
+        <p class="status-foot">Found another? <a href="https://github.com/matt-hewson/wasd/issues">Open an issue on GitHub</a>.</p>
+      </div>
+
+      <div>
+        <h3 class="status-h">Coming, not built yet</h3>
+        <p class="status-sub">Planned, in no fixed order. The <a href="https://github.com/matt-hewson/wasd/blob/main/ROADMAP.md">roadmap</a> has the full list.</p>
+        <dl class="coming">
+          <div class="built"><dt><span>A live link between two players <span class="tag">Built, being tested</span></span></dt>
+            <dd>Your partner's health, area and position on your map, the bosses they've beaten and the items they've found, live and at your spoiler tier. One player's WASD hosts it and Tailscale (free) connects the other: nothing hosted, no router changes.</dd></div>
+          <div><dt><span>Your partner on the overlay</span></dt>
+            <dd>Their health and area in the in-game overlay, not just the live page.</dd></div>
+          <div><dt><span>Co-op warnings</span></dt>
+            <dd>A heads-up before one of you does something the other hasn't, like killing a boss mid-questline.</dd></div>
+          <div><dt><span>Both players in one results page</span></dt>
+            <dd>One report for the whole co-op run.</dd></div>
+          <div><dt><span>Better build recommendations</span></dt>
+            <dd>Where your next levels and upgrades do the most.</dd></div>
+          <div><dt><span>The enemy you're locked on to</span></dt>
+            <dd>Its weaknesses and resistances while you fight it.</dd></div>
+          <div><dt><span>Better session comparison</span></dt>
+            <dd>How one run or attempt compares with another.</dd></div>
+          <div><dt><span>Update checks</span></dt>
+            <dd>WASD telling you when a new version is out, and spotting game updates more reliably.</dd></div>
+          <div><dt><span>Accessibility and interface improvements</span></dt>
+            <dd>Readability, keyboard use and layout.</dd></div>
+        </dl>
+        <p class="status-foot">Want something else? <a href="https://github.com/matt-hewson/wasd/discussions">Suggest it in Discussions</a>.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<hr class="rule">
+
+<!-- 7. Co-op & next -->
 <section class="sec" id="coop" aria-labelledby="coop-title">
   <div class="wrap coop">
     <div class="coop-copy">
@@ -423,7 +486,7 @@
 
 <hr class="rule">
 
-<!-- 7. About -->
+<!-- 8. About -->
 <section class="sec" id="about" aria-labelledby="about-title">
   <div class="wrap about">
     <div class="about-head">
@@ -443,7 +506,7 @@
   </div>
 </section>
 
-<!-- 8. Support -->
+<!-- 9. Support -->
 <section class="sec support" id="support" aria-labelledby="support-title">
   <div class="wrap support-in">
     <div class="soapstone">
