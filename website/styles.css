@@ -209,6 +209,25 @@ kbd{display:inline-grid;place-items:center;min-width:38px;height:34px;padding:0 
 .facts dt::before{content:"✓";color:var(--ember);font-weight:500}
 .facts dd{margin:6px 0 0 24px;color:var(--text);font-size:15.5px}
 .facts dd+dd{color:var(--muted)}
+
+/* Known bugs & coming features */
+.status-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(32px,6vw,88px);align-items:start}
+.status-h{font-size:28px}
+.status-sub{margin:6px 0 18px;color:var(--muted);font-size:15px}
+.issues,.coming{display:grid;gap:0;margin:0}
+.issues>div,.coming>div{padding:18px 0;border-top:1px solid var(--line)}
+.issues>div:last-child,.coming>div:last-child{border-bottom:1px solid var(--line)}
+.issues dt,.coming dt{font:600 15px/1.45 var(--sans);color:var(--bright);display:grid;grid-template-columns:14px minmax(0,1fr);gap:10px;align-items:baseline}
+.issues dt::before{content:"!";color:var(--blood);font-weight:700;text-align:center}
+.coming dt::before{content:"→";color:var(--gold);font-weight:500;text-align:center}
+.issues dt .tag,.coming dt .tag{margin-left:8px;vertical-align:1px}
+.issues dd,.coming dd{margin:6px 0 0 24px;color:var(--text);font-size:15.5px}
+.issues .fixed dt::before{content:"✓";color:var(--ember)}
+.issues .fixed dd{color:var(--muted)}
+.coming .built dt::before{content:"◆";color:var(--ember)}
+.tag{font:500 10.5px/1.4 var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted-2);border:1px solid var(--line);border-radius:3px;padding:1px 6px;white-space:nowrap}
+.fixed .tag,.built .tag{color:var(--ember);border-color:var(--ember-deep)}
+.status-foot{margin-top:16px;font-size:15px;color:var(--muted)}
 .unofficial{margin-top:20px;font-size:14px;color:var(--muted)}
 
 /* Install */
@@ -308,7 +327,7 @@ kbd{display:inline-grid;place-items:center;min-width:38px;height:34px;padding:0 
 
 /* Responsive */
 @media (max-width:980px){
-  .hero-in,.tiers,.surface,.surface.flip,.safety-grid,.install,.coop,.about,.support-in,.also{grid-template-columns:minmax(0,1fr)}
+  .hero-in,.tiers,.surface,.surface.flip,.safety-grid,.status-grid,.install,.coop,.about,.support-in,.also{grid-template-columns:minmax(0,1fr)}
   .surface.flip .surface-media{order:0}
   .side{position:static}
 }
