@@ -7,7 +7,6 @@ compile). The pre-flight checks are tests/pkg/test_release.py.
 """
 import hashlib
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -17,6 +16,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from cycle_installer import iscc  # noqa: E402
 from test_static import version_h, version_info  # noqa: E402
+from tmpdirs import remove_tree  # noqa: E402
 
 
 def sha256(path):
@@ -59,7 +59,7 @@ class ReleaseDryRunTest(unittest.TestCase):
                 self.assertEqual(sha256(os.path.join(ROOT, "build", f)), h, "release.ps1 changed build\\" + f)
             self.assertNotIn("git tag", log)  # a dry run never suggests tagging
         finally:
-            shutil.rmtree(out, ignore_errors=True)
+            remove_tree(out)
 
 
 if __name__ == "__main__":

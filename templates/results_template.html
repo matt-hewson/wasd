@@ -9,7 +9,8 @@
      injected in place of the data token on the SESSIONS line below, then opens it. The live page's
      Results button opens the same page served by WASD at /results, built fresh, where the co-op
      cards also swap codes with your partner and compare the two of you (through WASD's own
-     /api/coop, on this PC), and keeps itself current as you play (/api/sessions). It's the only page that shows co-op data. Everything
+     /api/coop, on this PC), and keeps itself current as you play (/api/sessions). Your partner comes from a pasted code or, while
+     a co-op session runs on the live page, live from that session. Everything
      else is inline: no network, no install, no fonts to fetch. One theme, the guide's Bonfire
      (dark, warm), with Windows system fonts. -->
 <style>
@@ -453,7 +454,7 @@
     <div class="coopbar">
       <button class="btn" data-coop="paste" title="Paste from the clipboard into the box">Paste</button>
       <button class="btn" data-coop="load">Load</button>
-      <button class="btn" data-coop="clear">Clear partner</button>
+      <button class="btn" data-coop="clear" hidden>Clear partner data</button>
       <span class="coopmsg" id="coopMsg"></span>
     </div>
     <p class="coopstate" id="coopState"></p>
@@ -666,7 +667,7 @@ function summarise(input) {
     // Boss kills, deaths (with the boss they were near, if any) and the
     // weapon in each hand, at session time t.
     const kills = ev.filter(e => e.type === "boss").map(e => ({ flag: e.flag, name: e.name || "A boss", area: e.area || "", t: e.t }));
-    const deathEvents = ev.filter(e => e.type === "death").map(e => ({ t: e.t, area: e.area || "", boss: e.boss || 0, bossName: e.bossName || "" }));
+    const deathEvents = ev.filter(e => e.type === "death").map(e => ({ t: e.t, area: e.area || "", boss: e.boss || 0, bossName: e.bossName || "", phase: e.phase || 0 }));
     const gear = ev.filter(e => e.type === "gear").map(e => ({ slot: e.slot, id: e.id, name: e.name || "?", upgrade: e.upgrade || 0, t: e.t }));
     let levelStart = start.level, levelEnd = start.level;
     if (start.level) levelRec.push({ h: offset, level: start.level });
@@ -782,10 +783,10 @@ function mapAreasModel(S) {
   });
 }
 
-// Every boss you've fought: kills (in kill order) and attempts (deaths near
-// an undefeated boss), across all sessions, on recorded time. A boss you've
-// died near but not killed is named only at Full: being near its place
-// doesn't mean you've seen it.
+// Every boss you've fought: kills (in kill order) and attempts (deaths in its
+// fight, with the phase it was in; older sessions: deaths near an
+// undefeated boss, no phase), across all sessions, on recorded time. A boss
+// you've attempted but not killed is named only at Full.
 function bossModel(S, tier) {
   const byFlag = new Map();
   const get = (flag, name, area) => {
@@ -793,7 +794,7 @@ function bossModel(S, tier) {
     return byFlag.get(flag);
   };
   for (const s of S.sessions) {
-    for (const d of s.deathEvents) if (d.boss) get(d.boss, d.bossName, d.area).attempts.push({ at: s.offset + d.t, n: s.n });
+    for (const d of s.deathEvents) if (d.boss) get(d.boss, d.bossName, d.area).attempts.push({ at: s.offset + d.t, n: s.n, phase: d.phase });
     for (const k of s.kills) { const b = get(k.flag, k.name, k.area); b.name = k.name; b.area = k.area || b.area; if (!b.kill) b.kill = { at: s.offset + k.t, n: k.n || s.n, start: s.start }; }
   }
   const all = [...byFlag.values()];
@@ -804,7 +805,7 @@ function bossModel(S, tier) {
     const sess = S.sessions.find(x => x.n === (b.kill ? b.kill.n : before[before.length - 1].n));
     return {
       name: b.kill || tier >= 3 ? b.name : `A boss in ${b.area || "an area you've been to"}`,
-      area: b.area, killed: !!b.kill, deaths: before.length,
+      area: b.area, killed: !!b.kill, deaths: before.length, phases: before.map(a => a.phase),
       ttk: b.kill && before.length ? b.kill.at - before[0].at : null,
       session: sess ? `S${sess.n} · ${fmtDate(sess.start)}` : "",
     };
@@ -1122,14 +1123,15 @@ function drawBosses(box, m) {
   }
   const marks = r => {
     const shown = Math.min(r.deaths, 30);
-    return `<span class="bx">${"✕".repeat(shown)}${r.deaths > shown ? `<em>+${r.deaths - shown}</em>` : ""}</span>` +
+    const furthest = Math.max(0, ...r.phases);
+    return `<span class="bx">${r.phases.slice(0, shown).map(p => (p ? `<span data-tip="Phase ${p}">✕</span>` : "✕")).join("")}${r.deaths > shown ? `<em>+${r.deaths - shown}</em>` : ""}</span>` +
       (r.killed ? '<span class="ok">✓</span>' : "") +
-      `<span class="bn">${r.killed ? (r.deaths ? `${r.deaths} death${r.deaths === 1 ? "" : "s"}` : "first try") : `${r.deaths} death${r.deaths === 1 ? "" : "s"} · not killed yet`}</span>`;
+      `<span class="bn">${r.killed ? (r.deaths ? `${r.deaths} death${r.deaths === 1 ? "" : "s"}` : "first try") : `${r.deaths} death${r.deaths === 1 ? "" : "s"} · not killed yet`}${furthest > 1 ? ` · furthest: phase ${furthest}` : ""}</span>`;
   };
   box.innerHTML = `<div class="bt head"><span>Boss</span><span>Deaths before the kill</span><span class="num">Time to kill</span><span class="num">Session</span></div>` +
     m.rows.map(r => `<div class="bt${r.killed ? "" : " open"}"><div><div class="bname">${esc(r.name)}</div><div class="barea">${esc(r.area)}</div></div>` +
       `<div class="bmarks">${marks(r)}</div><span class="num">${r.ttk != null ? fmtHM(r.ttk) : "–"}</span><span class="num dim">${esc(r.session)}</span></div>`).join("") +
-    `<div class="note">Deaths count as attempts when they happen near an undefeated boss's place. Time to kill: from the first attempt to the kill, in recorded time.</div>`;
+    `<div class="note">Deaths count as attempts when they happen while a boss's health bar is up (older sessions: near an undefeated boss). Hover a ✕ for the phase. Time to kill: from the first attempt to the kill, in recorded time.</div>`;
 }
 
 function drawRecords(box, cards) {
@@ -1476,8 +1478,24 @@ const KEY_KINDS = { key: "Keys", quest: "Quest items", tome: "Spell tomes and sc
 // After Copy: /api/coop/code's answer, and what had to be left out to
 // keep the code to one chat message (2,000 characters), if anything.
 function copiedText(r) {
-  return `Copied (${(r.code || "").length.toLocaleString()} characters). Paste it to your partner.` +
+  const whose = r.name ? `${r.name}'s code` : "";
+  return `Copied ${whose ? whose + " " : ""}(${(r.code || "").length.toLocaleString()} characters). Paste it to your partner.` +
     (r.leftOut ? ` To fit one chat message it leaves out ${r.leftOut}.` : "");
+}
+
+// The card's buttons from /api/coop (null: WASD didn't answer): Copy only
+// once your code is ready (a click before that copies nothing, and the
+// clipboard keeps whatever was there, e.g. your partner's code), and
+// Clear only once a partner is loaded.
+function coopButtons(c) {
+  const ready = !!(c && c.mineReady);
+  const name = c && c.loaded ? (c.partner && c.partner.name) || c.loadedName || "" : "";
+  return {
+    copyDisabled: !ready,
+    copyTitle: ready ? "" : "Load into the game first: your code is ready a few seconds later, with this page open.",
+    clearHidden: !(c && c.loaded),
+    clearLabel: name ? `Clear ${name}'s data` : "Clear partner data",
+  };
 }
 
 // The status line under the codes card, from /api/coop (null: WASD didn't answer).
@@ -1486,6 +1504,7 @@ function coopStatus(c) {
   const mine = c.mineReady ? "Your code is ready to copy." : "Your code is ready a few seconds after you load into the game.";
   if (!c.loaded) return `${mine} No partner code loaded.`;
   const p = c.partner;
+  if (c.live) return `Live: ${p && p.name || c.loadedName || "your partner"}${p ? `, level ${p.level}` : ""}, from your co-op session on the live page. Compare under Report for: Together.`;
   const who = p ? `${p.name || c.loadedName || "Your partner"}, level ${p.level}, code from ${ago(p.age)}` : c.loadedName || "your partner's code";
   return `${mine} Loaded: ${who}. Compare under Report for: Together.`;
 }
@@ -1741,6 +1760,12 @@ function setupCoop() {
     let c = null, text = "";
     try { const r = await fetch("/api/coop", { cache: "no-store" }); if (r.ok) { text = await r.text(); c = JSON.parse(text); } } catch (e) { c = null; }
     $("coopState").textContent = coopStatus(c);
+    const btn = coopButtons(c), copy = document.querySelector('#coop [data-coop="copy"]'),
+          clear = document.querySelector('#coop [data-coop="clear"]');
+    copy.disabled = btn.copyDisabled;
+    copy.title = btn.copyTitle;
+    clear.hidden = btn.clearHidden;
+    clear.textContent = btn.clearLabel;
     onCoopData(c);
     if (text === last) return;
     last = text;
@@ -1784,7 +1809,7 @@ function setupCoop() {
     },
     async clear() {
       msg("coopMsg", "");
-      try { await fetch("/api/coop/partner?clear=1", { method: "POST" }); msg("coopMsg", "Partner cleared."); }
+      try { await fetch("/api/coop/partner?clear=1", { method: "POST" }); msg("coopMsg", "Partner data cleared."); }
       catch (e) { msg("coopMsg", "WASD isn't running.", true); return; }
       refresh();
     },

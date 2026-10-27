@@ -2,7 +2,8 @@
 # (version info, icon, manifest: src\app.rc):
 #   <OutDir>\wasd-cli.exe   the command-line tool (console)
 #   <OutDir>\WASD.exe       the app: window, overlay, live page (no console)
-# main.cpp is compiled once; the two exes differ only in how they're linked
+# main.cpp (which includes every part in src\core and src\ds3) is compiled
+# once; the two exes differ only in how they're linked
 # (subsystem and entry point: wmain vs. wWinMain) and in their resources.
 # Run from a normal PowerShell prompt:
 #   .\build.ps1                              debug-friendly build into build\ (as before)

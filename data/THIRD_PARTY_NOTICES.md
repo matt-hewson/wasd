@@ -22,14 +22,14 @@ game, and the code using it was written for this project.
 
 | Source | Licence | Facts used | Where |
 |---|---|---|---|
-| [darksoulsiii-practice-tool](https://github.com/veeenu/darksoulsiii-practice-tool) (veeenu) | AGPL-3.0 | Pointer chains; CharacterStats layout; param table layout; per-param field offsets | `src/main.cpp` |
-| [DS3RuntimeScripting](https://github.com/AmySouls/DS3RuntimeScripting) (AmySouls) | MIT | Equipped-slot offsets and slot order; attribute and inventory structure layouts; item id prefixes | `src/main.cpp` |
-| [Paramdex](https://github.com/soulsmods/Paramdex) (soulsmods) | none stated | Param field layouts (weapons, armour, item lots, NPCs, materials) | `src/main.cpp` |
-| Souls Modding wiki | none stated | `CalcCorrectGraph` (stat scaling curves) | `src/main.cpp` |
-| [Dark Souls III CT](https://github.com/The-Grand-Archives/Dark-Souls-III-CT-TGA) (The Grand Archives) | none stated | Map section, play region, last bonfire, death count, play time, NG cycle and character name offsets | `src/main.cpp` |
-| [SoulSplitter](https://github.com/FrankvdStam/SoulSplitter) (FrankvdStam) | GPL-3.0 | How event flags are stored and read; boss-defeated flag ids | `src/main.cpp`, `data/bosses.tsv` |
-| [ds3-attack-rating-calculator](https://github.com/Derling/ds3-attack-rating-calculator) (Derling) | none stated | The shape of the attack-rating calculation | `src/main.cpp` |
-| [Fextralife DS3 wiki](https://darksouls3.wiki.fextralife.com/) | site terms | Formulas and breakpoints: soul level cost, equip load, rings, attunement, stamina, roll tiers, poise; expected values in tests | `src/main.cpp`, `tests/cpp/test_formulas.cpp` |
+| [darksoulsiii-practice-tool](https://github.com/veeenu/darksoulsiii-practice-tool) (veeenu) | AGPL-3.0 | Pointer chains; CharacterStats layout; param table layout; per-param field offsets | `src/ds3/` |
+| [DS3RuntimeScripting](https://github.com/AmySouls/DS3RuntimeScripting) (AmySouls) | MIT | Equipped-slot offsets and slot order; attribute and inventory structure layouts; item id prefixes | `src/ds3/` |
+| [Paramdex](https://github.com/soulsmods/Paramdex) (soulsmods) | none stated | Param field layouts (weapons, armour, item lots, NPCs, materials) | `src/ds3/` |
+| Souls Modding wiki | none stated | `CalcCorrectGraph` (stat scaling curves) | `src/ds3/` |
+| [Dark Souls III CT](https://github.com/The-Grand-Archives/Dark-Souls-III-CT-TGA) (The Grand Archives) | none stated | Map section, play region, last bonfire, death count, play time, NG cycle and character name offsets | `src/ds3/` |
+| [SoulSplitter](https://github.com/FrankvdStam/SoulSplitter) (FrankvdStam) | GPL-3.0 | How event flags are stored and read; boss-defeated flag ids | `src/ds3/`, `data/bosses.tsv` |
+| [ds3-attack-rating-calculator](https://github.com/Derling/ds3-attack-rating-calculator) (Derling) | none stated | The shape of the attack-rating calculation | `src/ds3/` |
+| [Fextralife DS3 wiki](https://darksouls3.wiki.fextralife.com/) | site terms | Formulas and breakpoints: soul level cost, equip load, rings, attunement, stamina, roll tiers, poise; expected values in tests | `src/ds3/`, `tests/cpp/test_formulas.cpp` |
 | [BinderTool](https://github.com/Atvaark/BinderTool) (Atvaark) | MIT | The archive (BHD5 / BDT) layout, name hash and DCX container; **the archives' public RSA keys, copied as constants** (the regulation file's key is read from the user's own game exe) | `tools/ds3_archive.py` |
 | [SoulsFormats](https://github.com/soulsmods/SoulsFormatsNEXT) (soulsmods) | GPL-3.0 | The MSB3 map layout (param lists, parts, Treasure events), the BND4 and FMG text layouts, the EMEVD event-script header | `tools/` |
 | [DarkScript3](https://github.com/AinTunez/DarkScript3) (AinTunez and contributors) | none stated | What DS3's event-script instructions do and how their arguments are laid out (its `ds3-common.emedf.json`), used to read the NPC questlines behind `data/missables.tsv` | research for `data/missables.tsv` |
@@ -39,6 +39,14 @@ WASD's byte patterns (how it finds `WorldChrMan`, `GameDataMan`,
 offset in the running game) are its own: found in the game's code by
 `tools/find_patterns.py`, not taken from any of
 the projects above.
+
+**Where the event flag ids come from.** Item pickup and bonfire flags are
+read from the game's own tables in your install (`ItemLotParam`,
+`BonfireWarpParam`); questline flags were worked out from the game's own
+event scripts. The 25 boss-defeated flags in `data/bosses.tsv` are the
+one set taken from a list, SoulSplitter's (GPL-3.0, the same licence as
+WASD's). They are kept as facts about the game, credited above, rather
+than re-derived.
 
 The radare2 disassembler was used to read the game's code during
 research; nothing from it is part of WASD.

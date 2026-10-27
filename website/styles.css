@@ -260,6 +260,8 @@ kbd{display:inline-grid;place-items:center;min-width:38px;height:34px;padding:0 
 /* Co-op / roadmap */
 .coop{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:clamp(32px,6vw,80px);align-items:start}
 .coop-copy p{margin-top:16px}
+.coop-steps{margin:16px 0 0;padding:14px 16px 14px 34px;display:grid;gap:8px;font-size:15.5px;background:var(--bg-2);border:1px solid var(--line-soft);border-radius:4px}
+.coop-steps li::marker{color:var(--gold);font:500 13px var(--mono)}
 .coop-copy .demo-code{margin-top:20px;font:400 13px/1.5 var(--mono);color:var(--muted);background:var(--bg-2);border:1px solid var(--line-soft);border-radius:4px;padding:12px 14px;overflow-x:auto;white-space:nowrap}
 .coop-copy .demo-code span{color:var(--gold)}
 .split{margin-top:22px;display:grid;grid-template-columns:repeat(3,1fr);border:1px solid var(--line);border-radius:4px;overflow:hidden;font:500 13px/1 var(--mono);text-align:center}

@@ -31,6 +31,77 @@ def game_dir():
     return d if d and os.path.exists(os.path.join(d, "Data5.bhd")) else None
 
 
+def early_ends(ins, defeat, reached):
+    """Where an event script can end before reached(bank, id, args) holds -- its id flag set with
+    no fight or phase -- other than while the boss is defeated or the player is a phantom (an end on
+    a condition group of character-type checks on the player). Walks every branch: 1000:1/2/3/4/101/103
+    (skip / end / goto on a condition group or always), 1003:1/2/101 (on a flag; flag type != 0 is the
+    event's own flag, off on its first run), 1003:12/13/14 (on the player's world: both ways), 1014
+    (labels). ins: [(bank, id, args)]."""
+    import struct
+
+    def sb(v):
+        return struct.unpack("<b", bytes([v]))[0]
+
+    labels = {}
+    for k, (b, i, _a) in enumerate(ins):
+        if b == 1014:
+            labels.setdefault(i, k)
+
+    def phantom_group(k, g):
+        conds = [(b, i, a) for b, i, a in ins[:k] if b in (3, 4) and a and sb(a[0]) == g]
+        return conds and all((b, i) in ((4, 3), (4, 27)) and struct.unpack_from("<i", a, 4)[0] == 10000
+                             for b, i, a in conds)
+
+    bad, seen, stack = set(), set(), [(0, None)]  # (pc, defeated: True / False / None unknown)
+    while stack:
+        pc, dead = stack.pop()
+        while (pc, dead) not in seen:
+            seen.add((pc, dead))
+            if pc >= len(ins):
+                if not dead:
+                    bad.add(pc)
+                break
+            b, i, a = ins[pc]
+            if reached(b, i, a):
+                break
+            nxt = pc + 1
+            flag = struct.unpack_from("<i", a, 4)[0] if len(a) >= 8 else None
+            if b == 1003 and i in (1, 2, 101) and a[2] != 0:  # the event's own flag: off
+                if a[1] == 0:
+                    if i == 2:
+                        if not dead:
+                            bad.add(pc)
+                        break
+                    nxt = pc + 1 + a[0] if i == 1 else labels.get(a[0], len(ins))
+            elif (b, i) in ((1000, 4), (1003, 13)):
+                if not dead:
+                    bad.add(pc)
+                break
+            elif (b, i) == (1000, 2):
+                if not dead and not phantom_group(pc, sb(a[2])):
+                    bad.add(pc)
+            elif (b, i) == (1003, 2):
+                if flag == defeat:
+                    if a[1] == 0 and not dead:
+                        bad.add(pc)
+                    dead = a[1] != 1
+                elif not dead:
+                    bad.add(pc)
+            elif (b, i) == (1000, 3):
+                nxt = pc + 1 + a[0]
+            elif (b, i) == (1000, 103):
+                nxt = labels.get(a[0], len(ins))
+            elif (b, i) in ((1000, 1), (1003, 1), (1003, 14), (1000, 101), (1003, 101), (1003, 12)):
+                dest = pc + 1 + a[0] if i in (1, 14) else labels.get(a[0], len(ins))
+                taken = dead
+                if b == 1003 and i in (1, 101) and flag == defeat:
+                    taken, dead = a[1] == 1, a[1] != 1
+                stack.append((dest, taken))
+            pc = nxt
+    return sorted(bad)
+
+
 @unittest.skipUnless(game_dir(), "DS3 not found: set WASD_GAME_DIR or run `wasd-cli.exe extract` once")
 @unittest.skipUnless(os.path.exists(BUNDLED), "no build\\python: run tools\\fetch_python.ps1")
 class RealDataTest(unittest.TestCase):
@@ -119,6 +190,56 @@ class RealDataTest(unittest.TestCase):
         self.assertEqual(committed, derived)
         self.assertEqual(len(derived), 67)
 
+    def test_committed_boss_fight_and_phase_flags_are_in_the_event_scripts(self):
+        # data/bosses.tsv's fight flags: each is a health-bar event of the
+        # boss's map (its id is set when it ends) that can't end before the bar
+        # (early_ends), or a flag set after a health bar and by no event that
+        # shows none (one may set it just before its bar). Phase flags: an
+        # event of that map that can't end before its first wait, or a flag
+        # one of its events sets.
+        sys.path.insert(0, os.path.join(ROOT, "tools"))
+        import ds3_archive
+        import extract_treasures as et
+        text = ds3_archive.Archive(game_dir(), "Data1")
+        bars = {(2003, 11), (2003, 80)}  # show a boss health bar (80: a rider's, the Gravetender's)
+
+        def shows_bar(b, i, a):
+            return (b, i) in bars and a[:1] == b"\x01"
+
+        def waits(b, i, a):  # a wait on the main condition group
+            return a[:1] == b"\x00" and (b in (3, 4) or (b, i) == (0, 0))
+
+        def sets_on(bank, iid, args):  # the flag a set-flag instruction turns on, else None
+            if (bank, iid) in ((2003, 2), (2003, 62)) and len(args) >= 5 and args[4] == 1:
+                return int.from_bytes(args[:4], "little")
+            return None
+
+        with open(os.path.join(ROOT, "data", "bosses.tsv"), encoding="utf-8") as f:
+            rows = [l.rstrip("\n").split("\t") for l in f if l.strip() and not l.startswith("#")]
+        self.assertEqual(len(rows), 25)
+        for row in rows:
+            flag = int(row[0])
+            m = "m%02d_%02d_00_00" % (flag // 100000 % 100, flag // 10000 % 10)
+            events = et.read_emevd_events(ds3_archive.dcx_decompress(text.read("/event/%s.emevd.dcx" % m)))
+            after_bar, barless_sets, phase_ok = set(), set(), set(events)
+            for eid, ins in events.items():
+                shown = next((k for k, x in enumerate(ins) if shows_bar(*x)), None)
+                if shown is None:
+                    barless_sets.update(sets_on(*x) for x in ins)
+                else:
+                    after_bar.update(sets_on(*x) for x in ins[shown + 1:])
+                phase_ok.update(sets_on(*x) for x in ins)
+            for f in map(int, row[4].split(",")):
+                if f in events:
+                    self.assertTrue(any(shows_bar(*x) for x in events[f]), "%d fight %d: no health bar" % (flag, f))
+                    self.assertEqual(early_ends(events[f], flag, shows_bar), [], "%d fight %d ends early" % (flag, f))
+                else:
+                    self.assertIn(f, after_bar, "%d fight %d" % (flag, f))
+                    self.assertNotIn(f, barless_sets, "%d fight %d: also set by an event with no bar" % (flag, f))
+            for f in (map(int, row[5].split(",")) if len(row) > 5 and row[5] else []):
+                self.assertIn(f, phase_ok, "%d phase %d" % (flag, f))
+                if f in events:
+                    self.assertEqual(early_ends(events[f], flag, waits), [], "%d phase %d ends early" % (flag, f))
 
 if __name__ == "__main__":
     unittest.main()

@@ -54,6 +54,27 @@ TEST(data_bosses) {
   CHECK_EQ(dlc, 6);
 }
 
+// Every boss has a fight flag; fight and phase flags are temporary flags
+// (thousands digit 5, cleared when the map reloads) of the boss's own map
+// block, each listed once.
+TEST(data_boss_fight_and_phase_flags) {
+  int phases = 0, threePhases = 0;
+  for (const auto& b : LoadBosses()) {
+    if (b.fight.empty()) CHECK_EQ(b.flag, 0u);  // a boss with no fight flag
+    std::vector<uint32_t> all = b.fight;
+    all.insert(all.end(), b.phases.begin(), b.phases.end());
+    for (uint32_t f : all) {
+      if (f / 10000 != b.flag / 10000 || f / 1000 % 10 != 5)
+        CHECK_EQ(std::to_string(b.flag) + ": " + std::to_string(f), std::string("(a temporary flag of its map)"));
+      if (std::count(all.begin(), all.end(), f) != 1) CHECK_EQ(f, 0u);  // listed twice
+    }
+    phases += b.phases.empty() ? 0 : 1;
+    threePhases += b.phases.size() == 2 ? 1 : 0;
+  }
+  CHECK_EQ(phases, 23);  // all but High Lord Wolnir and the Ancient Wyvern
+  CHECK_EQ(threePhases, 2);  // Sister Friede, Slave Knight Gael
+}
+
 TEST(data_route_names_real_bosses_and_areas) {
   auto route = LoadRoute();
   auto bosses = LoadBosses();
@@ -143,6 +164,35 @@ TEST(data_missables) {
     // Event flags are 8 digits, or 4 for global flags (NPC questline states).
     for (const auto* needs : {&m.relevant, &m.trigger, &m.done})
       for (uint32_t f : data_test::NeedsFlags(*needs)) CHECK(f >= 10000000u || (f >= 1000u && f <= 9999u));
+  }
+}
+
+// An NPC's questline is one state flag at a time: the game clears a step's
+// flag when it sets the next. So an entry that is done at a step must stay
+// done at every step after it, with only that later step's flag on. The step
+// orders are from the event scripts (Yoel's 1061 -> 1062 once all draws are
+// used turned "Recruit Yoel" back to pending, live).
+TEST(data_missables_stay_done_at_later_questline_steps) {
+  struct Case { std::string id; std::vector<uint32_t> steps; };
+  const std::vector<Case> cases = {
+      {"yoel-recruit", {1061, 1062, 1064}},
+      {"sirris-vow", {1128, 1129}},
+      {"sirris-rosaria", {1129, 1130}},
+      {"greirat-irithyll", {1206, 1207}},
+      {"anri-horace", {1347, 1348, 1349, 1350, 1351, 1352, 1353}},
+  };
+  auto missables = LoadMissables();
+  for (const auto& c : cases) {
+    auto it = std::find_if(missables.begin(), missables.end(), [&](const Missable& m) { return m.id == c.id; });
+    if (it == missables.end()) {
+      CHECK_EQ(c.id, std::string("(an entry of missables.tsv)"));
+      continue;
+    }
+    for (uint32_t step : c.steps) {
+      auto only = [step](uint32_t f) { return f == step; };
+      if (!NeedsMet(it->done, only)) CHECK_EQ(c.id + " at " + std::to_string(step), std::string("(done)"));
+      if (NeedsMet(it->trigger, only)) CHECK_EQ(c.id + " at " + std::to_string(step), std::string("(not missed)"));
+    }
   }
 }
 

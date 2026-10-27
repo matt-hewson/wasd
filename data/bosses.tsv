@@ -1,4 +1,4 @@
-# DS3 bosses: defeat flag, area, required/optional, note. No names here: the app shows the name the game puts on
+# DS3 bosses: defeat flag, area, required/optional, note, fight flags, phase flags. No names here: the app shows the name the game puts on
 #   the boss's health bar, read from the user's own install (generated/boss_names.tsv).
 # Flag: the boss's defeat event flag (ids credited in data/THIRD_PARTY_NOTICES.md; 14000800 verified flipping live).
 # Area: where the boss stands in the game's map files (its enemy parts, entity flag - 10,000,000 + 0..9), by
@@ -9,29 +9,39 @@
 #   are required; Curse-rotted Greatwood is optional though its area is on the main path.
 # Note: the DLC the boss belongs to, from its map (m45 Ashes of Ariandel; m50, m51 The Ringed City). The app counts
 #   DLC bosses apart by the "DLC" in it.
-# flag	area	status	note
-14000800	Cemetery of Ash	required
-13000800	High Wall of Lothric	required
-13100800	Undead Settlement	optional
-13300850	Road of Sacrifices	required
-13300800	Farron Keep	required
-13500800	Cathedral of the Deep	required
-13800800	Catacombs of Carthus	required
-13800830	Smouldering Lake	optional
-13700850	Irithyll of the Boreal Valley	required
-13900800	Profaned Capital	required
-13700800	Anor Londo	required
-13000890	High Wall of Lothric	required
-13010800	Lothric Castle	required
-13000830	Consumed King's Garden	optional
-14000830	Untended Graves	optional
-13410830	Grand Archives	required
-13200800	Archdragon Peak	optional
-13200850	Archdragon Peak	optional
-14100800	Kiln of the First Flame	required
-14500800	Painted World of Ariandel	required	DLC1: Ashes of Ariandel
-14500860	Painted World of Ariandel	optional	DLC1: Ashes of Ariandel
-15000800	The Dreg Heap	required	DLC2: The Ringed City
-15100800	The Ringed City	required	DLC2: The Ringed City
-15100850	The Ringed City	optional	DLC2: The Ringed City
-15110800	The Ringed City	required	DLC2: The Ringed City
+# Fight: event flags, any of which is set while the boss's fight is on: the game's own event that shows the boss's
+#   health bar sets it: its event id, set when the event ends right after the bar, where no path through the event
+#   can end before the bar (other than when the boss is defeated or the player is a phantom); else a flag set right
+#   after the bar (Dancer's event can end early another way; Wolnir's two events each end on whether he's been
+#   fought before). Map-local temporary flags (thousands digit 5), so the game clears them when the map reloads after
+#   a death. 14005810 verified live: on as the bar appeared, off at each death. A death while a fight is on is an
+#   attempt at that boss.
+# Phases: one flag per phase after the first, in order, each set by the event where that phase begins (a health-bar
+#   or AI-signal event; temporary too). The phase is 1 + the position of the last one set. 14005802 verified live (Iudex
+#   Gundyr's second phase). The real-data suite checks every fight and phase flag against the game's event scripts.
+# flag	area	status	note	fight	phases
+14000800	Cemetery of Ash	required		14005810	14005802
+13000800	High Wall of Lothric	required		13005810	13005815
+13100800	Undead Settlement	optional		13105810	13105811
+13300850	Road of Sacrifices	required		13305860	13305851
+13300800	Farron Keep	required		13305810	13305802
+13500800	Cathedral of the Deep	required		13505810	13505802
+13800800	Catacombs of Carthus	required		13805805
+13800830	Smouldering Lake	optional		13805840	13805832
+13700850	Irithyll of the Boreal Valley	required		13705860	13705865
+13900800	Profaned Capital	required		13905810	13905815
+13700800	Anor Londo	required		13705810	13705815
+13000890	High Wall of Lothric	required		13005885,13005886	13005891
+13010800	Lothric Castle	required		13015810	13015811
+13000830	Consumed King's Garden	optional		13005830	13005835
+14000830	Untended Graves	optional		14005840	14005832
+13410830	Grand Archives	required		13415830	13415831
+13200800	Archdragon Peak	optional		13205810
+13200850	Archdragon Peak	optional		13205860	13205852
+14100800	Kiln of the First Flame	required		14105810	14105802
+14500800	Painted World of Ariandel	required	DLC1: Ashes of Ariandel	14505810	14505802,14505813
+14500860	Painted World of Ariandel	optional	DLC1: Ashes of Ariandel	14505870	14505871
+15000800	The Dreg Heap	required	DLC2: The Ringed City	15005810	15005803
+15100800	The Ringed City	required	DLC2: The Ringed City	15105804	15105802
+15100850	The Ringed City	optional	DLC2: The Ringed City	15105851	15105852
+15110800	The Ringed City	required	DLC2: The Ringed City	15115810	15115802,15115803

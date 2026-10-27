@@ -56,6 +56,10 @@ class LayoutTest(unittest.TestCase):
         code = ctp.to_text(ctp.encode(s))
         self.assertTrue(code.startswith("WASD-"))
         self.assertEqual(ctp.from_text(code[:20] + "\n  " + code[20:]), ctp.encode(s))  # whitespace ignored
+        self.assertEqual(ctp.from_text("```\n" + code + "\n```"), ctp.encode(s))  # a chat code block
+        self.assertNotIn("_", code)  # Discord markdown eats underscores
+        old = code.replace("+", "-").replace("/", "_")  # the older base64url form still loads
+        self.assertEqual(ctp.from_text(old), ctp.encode(s))
 
     def test_refusals(self):
         code = ctp.to_text(ctp.encode(sample()))

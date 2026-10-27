@@ -28,7 +28,9 @@ This roadmap shows the current direction of the project. Priorities may change b
 
 ### Co-op
 
-- Co-op partner state sharing: shared found items, your partner's health and area on the overlay
+- [x] Live co-op on the live page: your partner's health, area, map position, bosses and items, at your spoiler
+  setting, over Tailscale with nothing hosted (being tested with a real partner)
+- Your partner's health and area on the overlay
 - Warnings before one player does something the other hasn't, like killing a boss mid-questline
 - Both players in one results page
 

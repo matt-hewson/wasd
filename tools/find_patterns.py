@@ -8,7 +8,7 @@ the code, and keeps the shortest.
 Two kinds of target:
   rip:<rva>    a pointer cell the code loads RIP-relatively ([rip+disp32]). Only REX-prefixed one-byte-opcode forms
                are used (REX, opcode, ModRM 00-xxx-101, disp32 at +3, then any immediate), so a pattern resolves as
-               cell = instruction + length + disp32, the way src/main.cpp's resolver reads them.
+               cell = instruction + length + disp32, the way src/ds3/player.cpp's resolver reads them.
   disp:<value> a struct offset used as [reg+disp32] (REX, opcode, ModRM 10-xxx-rrr without SIB, disp32 at +3);
                the pattern yields the value itself (e.g. the XA offset).
 In the pattern, the instruction's own displacement is a wildcard, and so are the rel32 of calls / jumps and the

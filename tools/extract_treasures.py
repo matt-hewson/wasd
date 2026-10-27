@@ -626,6 +626,39 @@ def read_emevd_instructions(data, wanted):
     return out
 
 
+def read_emevd_events(data):
+    """{event id: [(bank, id, args bytes)]} of a DS3 event script, each
+    event's instructions in order. Layout as in read_emevd_instructions;
+    each event is 0x30 bytes: id i64, instruction count i64, offset i64
+    (into the instructions table), then its parameters."""
+    if data[:4] != b"EVD\0" or data[4] != 0 or data[5] != 0xFF:
+        raise NotImplementedError("only 64-bit little-endian EMEVD files are supported")
+    (version,) = struct.unpack_from("<i", data, 8)
+    if version != 0xCD:
+        raise NotImplementedError("EMEVD version 0x%x (DS3's is 0xCD)" % version)
+    ev_count, ev_off, inst_count, inst_off = struct.unpack_from("<qqqq", data, 0x10)
+    args_len, args_off = struct.unpack_from("<qq", data, 0x70)
+    if ev_off + 0x30 * ev_count > len(data) or inst_off + 0x20 * inst_count > len(data) \
+            or args_off + args_len > len(data):
+        raise ValueError("EMEVD tables run past the end of the file")
+    out = {}
+    for e in range(ev_count):
+        eid, icount, ioff = struct.unpack_from("<qqq", data, ev_off + 0x30 * e)
+        if icount and (ioff < 0 or ioff % 0x20 or ioff // 0x20 + icount > inst_count):
+            raise ValueError("EMEVD event %d's instructions run past the instructions table" % eid)
+        ins = []
+        for k in range(ioff // 0x20, ioff // 0x20 + icount):
+            bank, iid, alen, aoff, _layer = struct.unpack_from("<iiqqq", data, inst_off + 0x20 * k)
+            if alen == 0:  # no arguments (labels): the offset is unset
+                ins.append((bank, iid, b""))
+                continue
+            if aoff < 0 or aoff + alen > args_len:
+                raise ValueError("EMEVD instruction %d's arguments run past the arguments block" % k)
+            ins.append((bank, iid, data[args_off + aoff:args_off + aoff + alen]))
+        out[eid] = ins
+    return out
+
+
 def read_health_bars(text_archive, maps):
     """{(map, entity): [name id, ...]} for every boss health bar the maps'
     event scripts show (event/<map>.emevd.dcx, in Data1)."""

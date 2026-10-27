@@ -154,19 +154,31 @@ TEST(coop_text_round_trip_ignores_whitespace) {
   auto bytes = coop_test::Packet();
   std::string text = CoopToText(bytes);
   CHECK_EQ(text.rfind("WASD-", 0), size_t(0));
-  CHECK(text.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_") ==
+  // Standard base64 after the prefix: no '_', which Discord's markdown eats.
+  CHECK(text.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", 5) ==
         std::string::npos);
   CHECK(CoopDecodeText(text).state == coop_test::Sample());
   std::string wrapped = "  " + text.substr(0, 30) + "\r\n" + text.substr(30, 40) + " \t" + text.substr(70) + "\n";
   CHECK(CoopDecodeText(wrapped).ok);
-  // A plain base64url round trip at every remainder length.
+  CHECK(CoopDecodeText("```\n" + text + "\n```").ok);  // pasted from a chat code block
+  // A plain base64 round trip at every remainder length.
   for (size_t n = 0; n < 7; ++n) {
     std::vector<uint8_t> in(n);
     for (size_t k = 0; k < n; ++k) in[k] = static_cast<uint8_t>(0xF0 + k);
     std::vector<uint8_t> out;
-    CHECK(Base64UrlDecode(Base64UrlEncode(in), &out));
+    CHECK(Base64Decode(Base64Encode(in), &out));
     CHECK(out == in);
   }
+}
+
+TEST(coop_text_reads_older_base64url_codes) {
+  std::vector<uint8_t> out;
+  CHECK_EQ(Base64Encode({0xFB, 0xFF}), std::string("+/8"));
+  CHECK(Base64Decode("-_8", &out));  // the same bytes in base64url
+  CHECK(out == std::vector<uint8_t>({0xFB, 0xFF}));
+  std::string text = CoopToText(coop_test::Packet()), old = text.substr(5);
+  for (char& c : old) c = c == '+' ? '-' : c == '/' ? '_' : c;
+  CHECK(CoopDecodeText("WASD-" + old).state == coop_test::Sample());
 }
 
 TEST(coop_text_refuses_damage_with_a_reason) {
@@ -177,8 +189,35 @@ TEST(coop_text_refuses_damage_with_a_reason) {
   flipped[20] = flipped[20] == 'A' ? 'B' : 'A';
   CHECK(CoopDecodeText(flipped).error.find("damaged") == 0);                 // checksum
   CHECK(CoopDecodeText(text.substr(0, text.size() - 6)).error.find("damaged") == 0);  // cut short
-  CHECK(CoopDecodeText(text.substr(0, 25) + "!" + text.substr(26)).error.find("damaged") == 0);  // not base64url
+  CHECK(CoopDecodeText(text.substr(0, 25) + "!" + text.substr(26)).error.find("damaged") == 0);  // not base64
+  CHECK(CoopDecodeText(flipped).error.find("code block") != std::string::npos);  // says how to send it
   CHECK(!CoopDecodeText("WASD-").ok);
+}
+
+TEST(coop_your_own_code_is_recognised) {
+  SharedGameState mine = coop_test::Sample();
+  SharedGameState code = mine;  // your code from earlier, pasted back
+  CHECK(CoopIsOwnCode(mine, code));
+  mine.playSeconds += 600;  // played on since, found another pickup
+  mine.pickupsFound.bits[1] = true;
+  CHECK(CoopIsOwnCode(mine, code));
+  // A partner who happens to share the name: something you haven't found,
+  // more play time, or another journey.
+  SharedGameState other = code;
+  mine.pickupsFound.bits = {true, false, true};
+  other.pickupsFound.bits = {true, true, true};
+  CHECK(!CoopIsOwnCode(mine, other));
+  other = code, other.playSeconds = mine.playSeconds + 1;
+  CHECK(!CoopIsOwnCode(mine, other));
+  other = code, other.clearCount = 2;
+  CHECK(!CoopIsOwnCode(mine, other));
+  other = code, other.characterName = "Someone Else";
+  CHECK(!CoopIsOwnCode(mine, other));
+  // Lists that differ (another version): name and play time decide.
+  other = code, other.pickupsFound.fingerprint ^= 1;
+  CHECK(CoopIsOwnCode(mine, other));
+  // Your own state not read yet (no name): never refused.
+  CHECK(!CoopIsOwnCode(SharedGameState(), code));
 }
 
 TEST(coop_invalid_packets_are_refused) {

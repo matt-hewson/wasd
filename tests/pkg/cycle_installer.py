@@ -11,7 +11,6 @@ build\\wasd-cli.exe and build\\python (test.ps1 makes them).
 """
 import ctypes
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -21,6 +20,7 @@ import winreg
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from test_static import version_h  # noqa: E402
+from tmpdirs import remove_tree  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ISS = os.path.join(ROOT, "installer", "wasd.iss")
@@ -109,7 +109,7 @@ def remove_leftover_test_install():
         winreg.DeleteKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY)
     if os.path.exists(SHORTCUT):
         os.remove(SHORTCUT)
-    shutil.rmtree(TEST_DATA, ignore_errors=True)
+    remove_tree(TEST_DATA)
 
 
 @unittest.skipUnless(os.name == "nt" and iscc(), "needs Inno Setup 6 (winget install JRSoftware.InnoSetup)")
@@ -134,7 +134,7 @@ class InstallerCycleTest(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        shutil.rmtree(cls.out, ignore_errors=True)
+        remove_tree(cls.out)
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="wasd install tést ")
@@ -147,7 +147,7 @@ class InstallerCycleTest(unittest.TestCase):
             self.app.kill()
             self.app.wait(timeout=10)
         remove_leftover_test_install()
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        remove_tree(self.tmp)
 
     def install(self, setup, *args):
         r = subprocess.run([setup, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/CURRENTUSER", *args], timeout=180)

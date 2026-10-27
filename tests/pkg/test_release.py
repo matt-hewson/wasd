@@ -9,6 +9,8 @@ import subprocess
 import tempfile
 import unittest
 
+from tmpdirs import remove_tree
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RELEASE = os.path.join(ROOT, "release.ps1")
 
@@ -30,7 +32,7 @@ class PreflightTest(unittest.TestCase):
         self.git("commit", "-q", "-m", "first")
 
     def tearDown(self):
-        shutil.rmtree(self.repo, ignore_errors=True)
+        remove_tree(self.repo)
 
     def git(self, *args):
         subprocess.run(["git", "-C", self.repo, "-c", "user.name=t", "-c", "user.email=t@example.invalid",

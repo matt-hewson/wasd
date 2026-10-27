@@ -15,6 +15,8 @@ import subprocess
 import tempfile
 import unittest
 
+from tmpdirs import remove_tree
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EXE = os.path.join(ROOT, "build", "wasd-cli.exe")
 
@@ -58,7 +60,7 @@ class UserDirOverrideTest(unittest.TestCase):
         self.tmp = tempfile.mkdtemp(prefix="wasd paths t\u00e9st ")
 
     def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        remove_tree(self.tmp)
 
     def test_paths_command_reports_the_override(self):
         code, out, err = run([EXE, "paths"], {"WASD_USER_DIR": self.tmp})
@@ -100,7 +102,7 @@ class InstalledLayoutTest(unittest.TestCase):
         self.env = {"WASD_USER_DIR": None, "LOCALAPPDATA": self.local}
 
     def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        remove_tree(self.tmp)
 
     def test_paths_resolve_to_the_install_and_localappdata(self):
         code, out, err = run([self.exe, "paths"], self.env)

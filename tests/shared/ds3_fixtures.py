@@ -169,9 +169,9 @@ def make_fmg(texts, no_text=()):
     return head + body
 
 
-def make_emevd(instructions, version=0xCD):
+def make_emevd(instructions, version=0xCD, event_id=0):
     """A DS3 event script (EMEVD, 64-bit little-endian) holding one event
-    with these instructions: [(bank, id, args bytes)]."""
+    (event_id) with these instructions: [(bank, id, args bytes)]."""
     header_size, event_size, inst_size = 0x90, 0x30, 0x20
     events_off = header_size
     inst_off = events_off + event_size
@@ -180,7 +180,7 @@ def make_emevd(instructions, version=0xCD):
     for bank, iid, a in instructions:
         inst += struct.pack("<iiqqq", bank, iid, len(a), len(args), -1)
         args += a + b"\0" * (-len(a) % 4)
-    event = struct.pack("<qqqqqI4x", 0, len(instructions), 0, 0, -1, 0)
+    event = struct.pack("<qqqqqI4x", event_id, len(instructions), 0, 0, -1, 0)
     head = bytearray(header_size)
     head[:8] = b"EVD\0\0\xff\x01\xff"
     struct.pack_into("<ii", head, 8, version, header_size + len(event) + len(inst) + len(args))

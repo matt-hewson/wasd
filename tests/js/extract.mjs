@@ -5,7 +5,7 @@
 // literals, regex literals and comments) and the pieces are evaluated
 // together, in the order given, in a fresh function scope.
 //
-//   const { derive, vagueLine } = load("templates/live.html", ["esc", ..., "derive"]);
+//   const { derive, parseUpgrade } = load("templates/live.html", ["esc", ..., "derive"]);
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";

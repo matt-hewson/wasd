@@ -581,6 +581,17 @@ class EmevdTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             et.read_emevd_instructions(good[:-8], (2003, 11))  # arguments cut short
 
+    def test_events_with_their_instructions_in_order(self):
+        bar = ds3_fixtures.health_bar(4000800, 905110)
+        flag_on = struct.pack("<iB3x", 14000801, 1)
+        e = ds3_fixtures.make_emevd([(2003, 11, bar), (2003, 2, flag_on)], event_id=14005810)
+        self.assertEqual(et.read_emevd_events(e), {14005810: [(2003, 11, bar), (2003, 2, flag_on)]})
+        self.assertEqual(et.read_emevd_events(ds3_fixtures.make_emevd([], event_id=7)), {7: []})
+        with self.assertRaises(NotImplementedError):
+            et.read_emevd_events(ds3_fixtures.make_emevd([], version=0xCC))
+        with self.assertRaises(ValueError):
+            et.read_emevd_events(e[:-8])  # arguments cut short
+
 
 def boss_maps(extra_enemies=()):
     """m40 with Iudex (4000800) and Champion Gundyr (4000830) on floors of

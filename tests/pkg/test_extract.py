@@ -25,6 +25,7 @@ PYTHON_DIR = os.path.join(ROOT, "build", "python")
 sys.path.insert(0, os.path.join(ROOT, "tests", "shared"))
 import ds3_fixtures  # noqa: E402
 from test_paths import files_under, run  # noqa: E402
+from tmpdirs import remove_tree  # noqa: E402
 
 HAVE_PYTHON = os.path.exists(os.path.join(PYTHON_DIR, "python.exe"))
 
@@ -87,7 +88,7 @@ class InstalledExtractTest(unittest.TestCase):
         self.generated = os.path.join(self.local, "WASD", "generated")
 
     def tearDown(self):
-        shutil.rmtree(self.tmp, ignore_errors=True)
+        remove_tree(self.tmp)
 
     def test_extract_writes_map_data_into_your_data_folder(self):
         program_files = files_under(self.app)

@@ -10,13 +10,13 @@ import { readFileSync } from "node:fs";
 import { load, definition, scriptOf, ROOT } from "./extract.mjs";
 
 const { summarise, fmtDur, fmtHM, tilesModel, areaBars, mapAreasModel, levelModel, timelineModel, heatModel, compareModel,
-        sessionRowsModel, perfModel, bossModel, recordsModel, gearModel, copiedText, coopStatus, coopModel,
+        sessionRowsModel, perfModel, bossModel, recordsModel, gearModel, copiedText, coopStatus, coopButtons, coopModel,
         partnerSummary, partnerBossModel, togetherModel, pairTiles, pairAreaBars, pairBossRows, pairRecords, jointTimelineModel,
         whoFoundModel, pairSessionRows } = load("templates/results_template.html",
   ["sessionStart", "summarise", "fmtInt", "fmtDur", "pad2", "fmtHM", "fmtClock", "fmtDate", "fmtDow", "fmtTime", "AREA_HUES", "areaColor",
    "tilesModel", "areaBars", "mapAreasModel", "bossModel", "recordsModel", "gearModel", "levelModel", "timelineModel", "heatModel",
    "compareModel", "sessionRowsModel", "perfModel",
-   "ago", "ATTRS", "KEY_KINDS", "copiedText", "coopStatus", "coopModel",
+   "ago", "ATTRS", "KEY_KINDS", "copiedText", "coopStatus", "coopButtons", "coopModel",
    "PARTNER_BOSS", "PARTNER_WEAPON", "partnerSummary", "partnerBossModel", "myCodeSession", "togetherModel", "pairTiles",
    "pairAreaBars", "pairBossRows", "pairRecords", "jointTimelineModel", "whoFoundModel", "pairSessionRows"]);
 
@@ -235,7 +235,7 @@ const fights = () => [
   at("2026-10-06T20:00:00", [
     { type: "gear", t: 0, slot: "R", id: 2010003, name: "Long Sword", upgrade: 3 },
     { type: "enter", t: 0, area: "High Wall of Lothric" },
-    { type: "death", t: 100, area: "High Wall of Lothric", x: 0, y: 0, z: 0, soulsLost: 0, boss: 13000800, bossName: "Vordt of the Boreal Valley" },
+    { type: "death", t: 100, area: "High Wall of Lothric", x: 0, y: 0, z: 0, soulsLost: 0, boss: 13000800, bossName: "Vordt of the Boreal Valley", phase: 2 },
     { type: "boss", t: 400, flag: 13000800, name: "Vordt of the Boreal Valley", area: "High Wall of Lothric", playTimeMs: 2 },
     { type: "death", t: 500, area: "Undead Settlement", x: 0, y: 0, z: 0, soulsLost: 0, boss: 13100800, bossName: "Curse-rotted Greatwood" },
     { type: "gear", t: 600, slot: "R", id: 3010000, name: "Claymore", upgrade: 0 },
@@ -250,6 +250,8 @@ test("bosses: kills in order, deaths before each, time to kill, attempts not yet
     [["Iudex Gundyr", true, 0, null], ["Vordt of the Boreal Valley", true, 2, 3600 + 400 - 1200], ["A boss in Undead Settlement", false, 1, null]]);
   assert.match(m.rows[1].session, /^S2 · /);
   assert.equal(m.meta, "2 bosses killed · 3 deaths at bosses");
+  // The phase of each attempt; 0 where the session had none (an older one).
+  assert.deepEqual(m.rows.map(r => r.phases), [[], [0, 2], [0]]);
   // At Full, a boss you've only died near is named.
   assert.equal(bossModel(S, 3).rows[2].name, "Curse-rotted Greatwood");
   assert.deepEqual(bossModel(summarise(two()), 3).rows, []);
@@ -326,6 +328,11 @@ test("co-op card: a loaded partner, before and after the game shows them", () =>
     "Your code is ready to copy. Loaded: Sir Partnerton. Compare under Report for: Together.");
   assert.equal(coopStatus({ mineReady: true, loaded: true, loadedName: "Sir Partnerton", partner: { name: "Sir Partnerton", level: 55, age: 125 } }),
     "Your code is ready to copy. Loaded: Sir Partnerton, level 55, code from 2 min ago. Compare under Report for: Together.");
+});
+
+test("co-op card: the partner live from a co-op session", () => {
+  assert.equal(coopStatus({ mineReady: true, loaded: true, live: true, loadedName: "", partner: { name: "Isolde", level: 31, age: 0 } }),
+    "Live: Isolde, level 31, from your co-op session on the live page. Compare under Report for: Together.");
 });
 
 // /api/coop as WASD sends it: you, a partner, and the lists compared.
@@ -426,6 +433,25 @@ test("after Copy: the code's length, and what was left out to fit one chat messa
   assert.equal(copiedText({ code: "WASD-" + "x".repeat(1495), leftOut: "" }), "Copied (1,500 characters). Paste it to your partner.");
   assert.equal(copiedText({ code: "WASD-x", leftOut: "the weapons per session and the 3 oldest sessions" }),
     "Copied (6 characters). Paste it to your partner. To fit one chat message it leaves out the weapons per session and the 3 oldest sessions.");
+  assert.equal(copiedText({ code: "WASD-xyz", leftOut: "", name: "Little John" }),
+    "Copied Little John's code (8 characters). Paste it to your partner.");
+});
+
+test("co-op buttons: Copy only once your code is ready, Clear only with a partner loaded", () => {
+  const none = coopButtons(null);
+  assert.equal(none.copyDisabled, true);
+  assert.equal(none.clearHidden, true);
+  const notReady = coopButtons({ mineReady: false, loaded: false, loadedName: "", partner: null });
+  assert.equal(notReady.copyDisabled, true);
+  assert.match(notReady.copyTitle, /^Load into the game first/);
+  const ready = coopButtons({ mineReady: true, loaded: false, loadedName: "", partner: null });
+  assert.equal(ready.copyDisabled, false);
+  assert.equal(ready.copyTitle, "");
+  assert.equal(ready.clearHidden, true);
+  const loaded = coopButtons({ mineReady: true, loaded: true, loadedName: "Sir Partnerton", partner: null });
+  assert.equal(loaded.clearHidden, false);
+  assert.equal(loaded.clearLabel, "Clear Sir Partnerton's data");
+  assert.equal(coopButtons({ mineReady: true, loaded: true, loadedName: "", partner: null }).clearLabel, "Clear partner data");
 });
 
 // ---- pair mode: your sessions (fights()) and a partner from /api/coop ----
