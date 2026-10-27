@@ -66,12 +66,12 @@ class Writer:
 
 
 def from_text(code):
-    """The packet inside a code (prefix, base64url, CRC-32 checked)."""
-    code = "".join(code.split())
+    """The packet inside a code (prefix, base64 or the older base64url, CRC-32 checked)."""
+    code = "".join(code.split()).replace("`", "")
     if not code.startswith(PREFIX):
         raise ValueError("not a WASD code")
-    body = code[len(PREFIX):]
-    raw = base64.urlsafe_b64decode(body + "=" * (-len(body) % 4))
+    body = code[len(PREFIX):].replace("-", "+").replace("_", "/")
+    raw = base64.b64decode(body + "=" * (-len(body) % 4), validate=True)
     packet, crc = raw[:-4], struct.unpack("<I", raw[-4:])[0]
     if zlib.crc32(packet) & 0xFFFFFFFF != crc:
         raise ValueError("damaged")
@@ -79,7 +79,7 @@ def from_text(code):
 
 
 def to_text(packet):
-    return PREFIX + base64.urlsafe_b64encode(packet + struct.pack("<I", zlib.crc32(packet) & 0xFFFFFFFF)).decode().rstrip("=")
+    return PREFIX + base64.b64encode(packet + struct.pack("<I", zlib.crc32(packet) & 0xFFFFFFFF)).decode().rstrip("=")
 
 
 def decode(packet):

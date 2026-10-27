@@ -19,7 +19,7 @@ restart-surviving read of one value (player HP).
 - **Read-only, always.** The only access rights ever requested from
   `OpenProcess` are `PROCESS_VM_READ | PROCESS_QUERY_INFORMATION`.
   `PROCESS_VM_WRITE` and `WriteProcessMemory` do not appear anywhere in
-  `src/main.cpp` — grep it yourself, it's one file.
+  `src/` — grep it yourself.
 - **Seamless Co-op only.** Vanilla online DS3 runs under the exact same
   `DarkSoulsIII.exe` process name, so before opening any handle the tool
   requires that a Seamless Co-op module (`ds3sc.dll`) already be loaded
@@ -27,7 +27,7 @@ restart-surviving read of one value (player HP).
   best-effort guard, not a guarantee — never rely on it alone. If
   Seamless Co-op ever renames its DLL, run `probe --list-modules` to see
   what's actually loaded and update `kSeamlessCoopModuleMarker` in
-  `src/main.cpp`.
+  `src/ds3/game.cpp`.
 
 ## Licence and credits
 
@@ -48,7 +48,13 @@ prompt:
 ```
 
 `build\` isn't in git (2026-10-07): build after cloning or pulling.
-Produces two exes from one compile of `src\main.cpp`, version **0.1.1**:
+Produces two exes from one compile of `src\main.cpp`, version **0.1.1**.
+`main.cpp` includes the rest of the code, in order, as one translation
+unit: `src\core\` holds what isn't specific to DS3 (files, logs,
+settings, sessions, the overlay, the app window, the live page server,
+memory tools), `src\ds3\` everything that knows the game. A part moves
+to core only once a second game needs it too.
+
 
 - **`build\WASD.exe`**, the app: double-click it. A window with its own taskbar button
   (status, map data, live page, overlay on/off, spoiler tier, results page, data folder,
@@ -101,7 +107,10 @@ version is `WASD_VERSION_STRING` in `src\version.h`). Then it builds
 optimised into `build\release` (leaving the dev exes in `build\` alone),
 fetches the bundled Python, runs every test suite -- the default run,
 `-Only pkg` with the exe checks and the full installer cycle on the
-release binaries, and `-Only realdata` -- builds the installer, writes
+release binaries, `-Only relay` with the co-op relay and session tests
+on them too (`WASD_BIN_DIR`; an exe outside the checkout runs as
+installed, so each test guide is given the checkout's map data), and
+`-Only realdata` -- builds the installer, writes
 and re-checks its SHA-256 file, and prints the `git tag` / `git push`
 commands. It never tags or pushes by itself: tag once the setup has been
 checked on a second PC. A release takes a few minutes, mostly
@@ -109,7 +118,7 @@ tests.
 
 ## Where WASD keeps its files
 
-Two places (`AppPaths` in `src/main.cpp`):
+Two places (`AppPaths` in `src/core/paths.cpp`):
 
 - **Program files** (read-only): `data\*.tsv` and `templates\`, found in
   the folder above the exe (`build\` here, `bin\` in an install).
@@ -148,22 +157,24 @@ No game needed. From a PowerShell prompt:
 
 ```powershell
 .\test.ps1                 # every suite; exits non-zero if any fails
-.\test.ps1 -Only js        # one suite: cpp, js, py, pkg or realdata
+.\test.ps1 -Only js        # one suite: cpp, js, py, pkg, relay or realdata
 .\test.ps1 -Filter route   # C++ tests whose name contains "route"
 ```
 
 | Suite | Where | Covers | Runs on |
 |---|---|---|---|
-| **C++** | `tests/cpp` | Formulas (soul cost, attunement, CalcCorrectGraph curves, poise, stamina, roll tiers), session bookkeeping (deaths, souls lost / recovered / gained, time per area), area lookup, JSON and the perf CSV, the co-op codes (bit packing at every length, snapshot and text round trips, clamped fields, every kind of refused packet or code, list fingerprints, the recorded time, deaths and levels summed from session logs, and the comparison's rows, the no-spoil rule (partner-only bosses, key items, areas and locations never named, at any tier) and distance), overlay wrapping, clock directions, Untended Graves vs. normal world, the route `needs` rules and "later" bosses. **Data lint:** every `data/*.tsv` through the real loaders, and the tables checked against each other (route and missable flags name real bosses, area names are areas of `region_areas.tsv`, key items exist under the same name in `item_names.tsv`, every boss in exactly one route step). | Windows + MSVC |
-| **JS** | `tests/js` | The live page's `derive()` (the spoiler rules for bosses and items at each tier, the boss chart, "later" bosses, tiles, status), its Results link and text parsers; the results page's `summarise()` (trail runs, warp attribution, time and deaths per area, sessions in order, levels against recorded time), each section's model (tiles, bars per area, map areas, soul level, timeline, when you play, compare two sessions, sessions table, tool performance), the co-op status line and `coopModel()` (everything the comparison draws). Both pages' whole scripts must parse. The functions are cut out of the templates by `tests/js/extract.mjs`, so the tests run the pages' real code. | Node 18+ |
+| **C++** | `tests/cpp` | Formulas (soul cost, attunement, CalcCorrectGraph curves, poise, stamina, roll tiers), session bookkeeping (deaths, souls lost / recovered / gained, time per area), area lookup, JSON and the perf CSV, the co-op codes (bit packing at every length, snapshot and text round trips, clamped fields, every kind of refused packet or code, list fingerprints, the recorded time, deaths and levels summed from session logs, and the comparison's rows, the no-spoil rule (partner-only bosses, key items, areas and locations never named, at any tier) and distance), overlay wrapping, clock directions, Untended Graves vs. normal world, the route `needs` rules and "later" bosses. **Data lint:** every `data/*.tsv` through the real loaders, and the tables checked against each other (route and missable flags name real bosses, area names are areas of `region_areas.tsv`, key items exist under the same name in `item_names.tsv`, every boss in exactly one route step). The live page's co-op session: its states from the relay's status, when it ends and why, typed codes, the partner's 30 s path, and `/api/state`'s `coop` at the spoiler tier; pairing rooms, the Seamless password read from its settings file and the pairing key. The relay WASD hosts: the WebSocket handshake, Base64, session codes and pairing keys, HTTP request and WebSocket frame parsing (masking, lengths, refusals), and the room rules (joining, forwarding, the heartbeat, a stale socket replaced, rooms forgotten). What the host reads from Tailscale's CLI: this PC's name and address, whether it's running, whether the relay's port is forwarded; running a process and capturing its output. | Windows + MSVC |
+| **JS** | `tests/js` | The live page's `derive()` (the spoiler rules for bosses and items at each tier, the boss chart, "later" bosses, tiles, status), its Results link and text parsers; the results page's `summarise()` (trail runs, warp attribution, time and deaths per area, sessions in order, levels against recorded time), each section's model (tiles, bars per area, map areas, soul level, timeline, when you play, compare two sessions, sessions table, tool performance), the co-op status line and `coopModel()` (everything the comparison draws). Both pages' whole scripts must parse. The functions are cut out of the templates by `tests/js/extract.mjs`, so the tests run the pages' real code. The live page's co-op pill, partner strip, popover and errors (`coopView`, `coopPopView`, `coopError`), the partner's boss marks and deaths, and the results card's live partner. | Node 18+ |
 | **Packaging** | `tests/pkg` | Rebuilds the exe, then checks what Windows and the installer read from it: the version resource matches `src/version.h` (numbers, product name, publisher), the manifest is `asInvoker` and the only one, the icon is embedded at every size, the exe is x64 and imports only Windows' own DLLs (no Visual C++ runtime), and `--version` prints the version. The install/uninstall cycle (`-Only pkg`) adds a real install, upgrade and uninstall. | Windows |
 | **Installer** | `tests/pkg/cycle_installer.py` | `.\test.ps1 -Only pkg` (not in the default run): compiles test builds of the installer, then installs into a folder with a space and an accent, checks every file, the uninstall entry's fields, the Start menu shortcut's target and identity, and the installed exes; upgrades to a "0.1.1" test build (same folder, one entry, data kept); checks uninstall is refused while the app runs; uninstalls (everything gone, data kept); and `/REMOVEUSERDATA=1`. All under a test identity, so a real install is never touched. | Windows + Inno Setup 6 |
 | **Release** | `tests/pkg/test_release.py`, `cycle_release.py` | `release.ps1`'s pre-flight checks on a throwaway git repo (default run): clean and untagged passes; uncommitted, untracked, already tagged or no version stops it. And with `-Only pkg`, a full `release.ps1 -DryRun -SkipTests` into a temp folder: the test-identity installer and a matching `.sha256`, optimised exes in `build\release`, the dev exes in `build\` untouched. | Windows + git (+ Inno Setup) |
 | **Real data** | `tests/realdata` | `.\test.ps1 -Only realdata` (not in the default run): the bundled and the dev Python run the extractor on your real DS3 install; the output must be identical. Skipped without the game. | Windows + the game |
+| **Relay** | `tests/relay` | The co-op relay WASD hosts, run on its own by `wasd-cli relay-host` with its timings shortened and driven by real WebSocket clients: creating and joining rooms, refusals (bad code, unknown room, a third player), frames passed both ways byte for byte up to the 64 KB limit, the heartbeat, text and oversized frames closed, partner joined/left notices, a dead socket replaced, pairing rooms (made by joining, two at most, bad keys refused), rooms forgotten. Then WASD's own client through `wasd-cli relay`: create, partner, frames both ways, a session that has ended, a bad code, a full room, its heartbeat keeping its place, a pairing room, and after the relay restarts a session by code ended but a pairing room back; a relay that stops answering without closing (both clients notice from their heartbeat alone, `--dead-ms`, then rejoin the same session once it answers); and two copies with live co-op links (`--sync`): each sees the other's state, changes go as deltas, an unchanged state sends nothing after the first snapshot, and both resync after the relay restarts. Then the live page's co-op session end to end (`session.test.mjs`): the built guide in overlay mode, with its own data folder, hosting the relay itself and driven through the page's `/api/coop/session`, `/api/coop/host` and `/api/state` with a made-up partner: a refused code, an unknown one, create, the partner's state arriving and changing, the results page's live partner, the partner dropping (reconnecting, last values kept), leave, joining a partner's session by code, stopping and starting the hosted relay; and a second guide pairing automatically by a Seamless Co-op password in a made-up game folder (waiting with no code, meeting the partner, Disconnect pausing it and Pair automatically resuming it, a changed password moving rooms). Opt-in, with Tailscale (`tailscale.test.mjs`, `$env:WASD_TAILSCALE_RELAY = "http://<this PC's Tailscale name>:8790"` and that port served): a hosting guide and one that reaches it only through the Tailscale address pair by password, pair again after the host restarts, and a made-up character's state crosses. Skipped until `build.ps1` has built the exe. | Windows + Node.js |
 | **Python** | `tests/py` | `tools/ds3_archive.py` (name hash, RSA header decryption with a toy key, AES against the FIPS-197 vector, DCX, reading a synthetic archive), `tools/extract_treasures.py` (a synthetic MSB: treasure → part → collision → play region, the m40 Untended split, the nearest-region fallback, enemies), `tools/find_patterns.py` (references, unique patterns and their resolution on a synthetic PE image), `tools/coop_test_partner.py` (its own reading and writing of the co-op code layout, the partner it makes, and, with the built exe, `wasd-cli coop` reading that partner's code) and what goes into a release (`data/` holds only our own files, the licence, the installer's list). | Python 3.8+ (AES test: Windows) |
 
 How the C++ tests reach the code: `tests/cpp/run_tests.cpp` includes
-`src/main.cpp` with `DS3_NO_MAIN` defined (which drops its `wmain`) and
+`src/main.cpp` (and with it every part in `src/core` and `src/ds3`)
+with `DS3_NO_MAIN` defined (which drops its `wmain`) and
 builds `build\wasd-tests.exe`, so tests call the tool's own functions.
 Logic that reads the game is tested through its pure core where there is
 one (`BossIsLaterIn`, `PerfCsvToJson`). Anything that needs the running
@@ -188,6 +199,8 @@ output. None of them ever write to the game.
 | `extract [--game <folder>]` | Reads item and enemy positions from your DS3 install into the map data (see "Where WASD keeps its files"). Exit codes: 0 done, 2 game folder not found, 3 no map archives there, 4 an archive couldn't be read, 5 no Python. |
 | `paths` | Prints where this copy reads its program files and writes your data (see "Where WASD keeps its files"), and whether it runs as a dev checkout or installed. UTF-8 output. |
 | `coop <code>` | Prints what a co-op code holds (character, level, HP/FP/stamina, map, region, bonfire, position, and the four flag sets with their list fingerprints), or why it's refused. No game needed. See "Co-op codes" below. |
+| `relay create\|<code>\|pair:<key> [--url URL] [--send HEX] [--seconds N] [--sync [--still] [--name N]]` | Creates or joins a co-op relay session (or a pairing room) and prints what happens: the code, the partner coming and going, frames received. With `--sync`, a live co-op link for a made-up character. No game needed. |
+| `relay-host [--port N]` | Runs only the co-op relay, on 127.0.0.1 (`relay_port`, 8790), until stopped (see "Co-op relay"). No game needed. |
 | `probe [--list-modules]` | Milestone-1 self-test: find the process, verify the Seamless Co-op marker, open a read-only handle, do 5 timed reads of the module's own PE header (`'MZ'`). Proves the mechanics without depending on any gameplay offset. Runs only when named (it was the default until 2026-10-07). |
 | `hp [iterations]` | Re-derives the HP pointer chain fresh every run and polls it at 10Hz, printing HP + read latency each time (default 100 reads, ~10s). |
 | `overlay` | **The main way to play with the guide**, and what runs when no command is given, e.g. when `wasd-cli.exe` is double-clicked. If a double-clicked run stops with an error, the window stays open until Enter (never when run from a terminal or script). A click-through HUD panel over the game window's top-right (game windowed or borderless) with only the critical hints: the spoiler tier with the nearest item, bosses done / total here, and boss weaknesses at the tier. It also serves the **live page**, a dashboard for a second monitor at http://localhost:8765 (this PC only), and opens it in your browser. It waits for the game and re-attaches after restarts. **F10** hides the overlay and pauses polling, **F11** shows perf figures, **F9** cycles the spoiler tier (also settable on the page). Ctrl+C exits. See "Live page" below. |
@@ -264,7 +277,7 @@ DarkSoulsIII.exe + 0x477FDB8   (WorldChrMan pointer cell -- found by AOB scan, n
                                   -> +0xF0 = Stamina current +0xF4 = max   +0xF8 = base max
 ```
 
-Implemented as `ResolvePlayerHp()` in `src/main.cpp`, used by `hp`,
+Implemented as `ResolvePlayerHp()` in `src/ds3/gear_stats.cpp`, used by `hp`,
 `stats`, and `wcm`. All nine fields (three stats × current/max/base-max)
 are wired up and verified live.
 
@@ -503,7 +516,7 @@ DarkSoulsIII.exe + 0x479B8B0     (ParamMaster cell on 1.15.2 -- found by
         -> linear-scan for a row's id, table base + offset = row address
 ```
 
-`ResolveParamTable`/`FindParamRow` in `main.cpp` implement this
+`ResolveParamTable`/`FindParamRow` in `src/ds3/params.cpp` implement this
 generically — any table name, any row id — intended for reuse beyond
 poise (per-item stats generally, not just this one field). Row *byte
 layout* within a found address still needs a source per table;
@@ -532,7 +545,7 @@ formula as the community documents for poise, and mathematically
 the natural consequence of the raw fields being multipliers: combining
 rates by multiplication is equivalent to combining their derived point
 values via `a + b - (a*b)/100` (from `(1-a/100)(1-b/100) = 1-(a+b-ab/
-100)/100`). `CombinePoise()` in `main.cpp` implements this; only
+100)/100`). `CombinePoise()` in `src/ds3/gear_stats.cpp` implements this; only
 Head/Chest/Hands/Legs are summed.
 
 **Verified against this session's own live data (2026-08-19):** the
@@ -1371,11 +1384,20 @@ flushed per line so a crash loses nothing. Sessions under a minute
 aren't saved, so quick checks don't leave clutter. `sessions/` and
 `reports/` are git-ignored: they're personal play data.
 
+A session is one character's. Loading another one (a different name, or
+the play time going back by more than a minute) ends the session and
+starts a new one in that character's folder, from a fresh baseline: their
+level, deaths and souls aren't counted as gained. For the first 5 s of a
+session (`kSessionSettleSeconds`) defeat flags that turn on only move the
+baseline. The boss list can still hold the previous character's flags,
+and a live switch once logged seven of the new character's old kills
+about 2 s after the load.
+
 | Event | Fields |
 |---|---|
 | `start` | character, level, deathsTotal, playTimeMs, startedAt |
 | `enter` | area (on every area change) |
-| `death` | area, x, y, z, soulsLost, deathsTotal; `boss` and `bossName` when it was an attempt (see below) |
+| `death` | area, x, y, z, soulsLost, deathsTotal; `boss`, `bossName` and `phase` when it was an attempt (see below) |
 | `boss` | flag, name, area, playTimeMs: a boss's defeat flag set during the session |
 | `gear` | slot (`R` / `L`), id, name, upgrade: the weapon in that hand, at the start and on every change |
 | `bloodstain` | souls recovered |
@@ -1390,11 +1412,18 @@ have them, so the results page's boss and gear sections start from there.
 - **Boss kills:** every boss's defeat flag is read each tick (with the
   live page's boss list). A flag that was clear on the last read and is
   set now is a kill; flags already set when the session starts aren't.
-- **Attempts:** a death within `kBossFightRange` (70 m) of an undefeated
-  boss's place (its `enemies.tsv` position, in its area), the nearest one
-  that's open in the route, counts as an attempt at it. It's an
-  approximation: there's no live read of "a boss fight is on" yet, so a
-  death just outside an arena counts too.
+- **Attempts:** a death while a boss's fight is on counts as an attempt
+  at it, with the phase it was in. A fight is on while one of the boss's
+  fight flags is set (`bosses.tsv`'s fight column): the game's own
+  health-bar event sets it as the bar appears. These are temporary flags,
+  so the game clears them when the map reloads after a death. Because the
+  reload can come before the death counter moves, the fight is remembered
+  for `kBossFightGraceSeconds` (30 s); a counted death then blocks that boss
+  until its flags read clear. The phase is 1 + the position of the last
+  phase flag set (the phases column), so a three-phase fight (Sister
+  Friede, Slave Knight Gael) reads 1, 2 or 3. Sessions recorded before this
+  have no `phase`, and their attempts used a 70 m distance from the boss
+  instead, so a death just outside an arena counted too.
 - **Weapons:** the weapon in the active right and left slot, its param id
   (upgrade in the last two digits) and name.
 
@@ -1485,7 +1514,7 @@ The live page's **Results** button (and the app window's "Results page",
 while the live page runs) opens the same page served by WASD at
 `/results` instead, built fresh from the sessions on each load. Served
 that way, its **Co-op codes** card works (Copy my code, Paste, Load,
-Clear partner) and, once a partner's code is loaded, the comparison of
+Clear partner data) and, once a partner's code is loaded, the comparison of
 the two of you below it: see "Co-op codes". It polls `/api/coop` every
 2 s. A saved `results.html` can't reach WASD, so there the card only says
 to open it from the live page.
@@ -1729,6 +1758,19 @@ ones on the bosses' health bars, read from your install
 them; required / optional follows our own route.
 DLC bosses are required or optional within their DLC. Defeated = the
 flag is ON.
+Each boss also lists its fight flags (set while its health bar is up)
+and one flag per phase after the first, for the session log's attempts
+(see "Session recording"). They come from the game's event scripts, and
+the real-data suite checks each one against them. A fight flag is a
+health-bar event's id, only where no path through the event can end
+before the bar (an event's id is set whenever it ends; ends while the
+boss is defeated or the player is a phantom are allowed), or else a flag
+such an event sets after the bar. A phase flag is an event's id (no
+early end before its first wait) or a flag one of the map's events sets.
+The first live test caught Dancer's fight reading as on in Vordt's fight
+(one of her events can end early), which this check now refuses. Iudex
+Gundyr's (14005810 fight, 14005802 phase 2) were verified live on
+2026-10-19.
 `progress` groups bosses by area. The companion window lists the current
 area's bosses, and the overlay shows "Bosses X / Y defeated here".
 
@@ -2001,7 +2043,7 @@ when it's undefeated and its step in `data/route.tsv` isn't open yet:
 the normal route doesn't take you there until other bosses are dead
 (the Dancer after three Lords of Cinder, the Dragonslayer Armour after
 the Dancer, the DLC after its entry boss...). `BossIsLater` in
-`main.cpp` reads this from the route's `needs`. Such a boss:
+`src/ds3/progress.cpp` reads this from the route's `needs`. Such a boss:
 
 - is left out of "the boss ahead" (page chart, overlay line) and out of
   the "here" counts, which gain "(+N later)"
@@ -2074,14 +2116,24 @@ and trims the overlay down to the critical lines.
 
 - `overlay` starts a small HTTP server in the same process, bound to
   **127.0.0.1 only** (port 8765, or the next free one up to 8774). It
-  opens the page in the default browser.
+  opens the page in the default browser. `live_port` in `settings.ini`
+  moves the first port (1024 to 65526; the next 9 are still tried), so a
+  second copy with its own data folder (`WASD_USER_DIR`), such as a test
+  partner, gets a predictable page of its own.
 - The server rejects requests whose `Host` header isn't
   localhost/127.0.0.1, as a DNS-rebinding guard.
 - It serves:
   - `templates/live.html` (read from disk on every request, so edits
     show on refresh)
   - `/api/state`: one JSON snapshot. The page polls it twice a second
-    and gets only new trail points each time.
+    and gets only new trail points each time. Its `coop` object is the
+    live co-op session and the partner (see "The co-op session on the
+    live page").
+  - `POST /api/coop/session?do=create|join&code=K7DP4X|leave|pair`: start,
+    join or leave that session, or turn auto pairing back on.
+  - `POST /api/coop/host?on=1|0`: host the co-op relay on this PC, or stop.
+  - `POST /api/coop/forward?on=1|0`: while hosting, have Tailscale forward the relay's port, or stop.
+  - `POST /api/coop/relay?url=...`: the host's relay address, as pasted (empty clears it), saved as `relay_url`.
   - `POST /api/tier?t=0..3`: the spoiler tier, the same setting as F9.
   - `POST /api/page?theme=a|b|c&muted=...`: the page's theme and muted
     panels (saved to `settings.ini`).
@@ -2145,6 +2197,11 @@ Route / Missables tab is open is remembered per browser.
   (two-handed when gripped so) and which one is in hand. The in-hand
   weapon's next upgrade is shown as materials held / needed. A ▲ marks a
   weapon with a better infusion at your stats (hover for the top three).
+  Re-read when an equip slot changes, when a weapon's id changes (an
+  upgrade or infusion, checked each second) and when the materials the
+  next upgrades need change (checked every 5s with the inventory; other
+  goods such as Estus don't trigger it). The inventory is read once per
+  refresh for all six upgrade lines.
 - **Nearby items:** every positioned pickup in the current named area.
   The list scrolls inside its panel.
   - Off and Vague: a count only (user's call, 2026-10-06; the API sends
@@ -2227,6 +2284,208 @@ MSVC.
   8 unfound + 6 found = the 14 of the Items count) and the chip grid all
   work.
 
+## Co-op relay — built into WASD, used by the live page
+
+Nothing is hosted for WASD: **one player's WASD is the relay**, and
+[Tailscale](https://tailscale.com) (free for personal use) carries the
+partner to it. `RelayServer` (`src/core/relay_server.cpp`, Winsock, no
+added libraries) pairs two WASD copies by a 6-character session code, or
+by a pairing key (see "Auto pairing" below), and passes their binary
+frames between them without reading them. It listens on **127.0.0.1
+only** (`relay_port`, 8790 by default): nothing on the LAN or the
+internet can reach it, and Windows Firewall has nothing to ask. Tailscale
+forwards the partner's connections to it.
+
+| Request | Answer |
+|---|---|
+| `GET /` | `200 WASD co-op relay` |
+| `POST /session` | `201 {"code":"K7DP4X"}`: a new, empty room |
+| `GET /session/{code}` | WebSocket upgrade into that room (`400` bad code, `404` no such room, `409` full; `426` without an upgrade) |
+| `GET /pair/{key}` | WebSocket upgrade into the pairing room for that key (64 hex digits), made on first use (`400` bad key, `409` full) |
+
+Codes are 6 characters from 30 that can't be mistaken for each other read
+aloud (no 0/O, 1/I/L, U; any case, spaces and dashes ignored), from
+Windows' random number generator. A room holds two sockets. A binary frame
+(at most 64 KB) goes to the other socket; the text frame `ping` is
+answered `pong` (the clients' heartbeat); any other text frame closes the
+socket (1003), a frame too big too (1009); each side hears
+`partner:joined` and `partner:left`. A socket silent for 30 s can be
+replaced by a newcomer (closed with 4000), so a client whose connection
+died without closing can come back. A room nobody joined is forgotten
+after 30 minutes, an empty one 10 minutes after its last socket left.
+Nothing is kept on disk, so when the host closes WASD every room goes: a
+session by code then ends for the partner ("no longer on the relay"); a
+pairing room is simply made again when both reconnect. The room rules
+(`RelayRooms`), the HTTP and WebSocket parsing and the handshake are pure
+functions, tested in C++; the server around them is a single thread with
+`select()`, at most 32 connections.
+
+`wasd-cli relay-host [--port N]` runs only the relay (the tests use it,
+with `--stale-ms`, `--empty-room-ms`, `--unjoined-room-ms` to shorten the
+timings, and `--stall-after MS --stall-for MS` to make it stop answering for a
+while with every socket left open, like a host whose PC slept). The app hosts the same relay itself with `host_relay=1`, or
+**Host the relay here** in the live page's co-op popover (`POST
+/api/coop/host?on=1|0`, saved to `settings.ini`).
+
+WASD's client is `RelayClient` (`src/core/relay_client.cpp`, WinHTTP
+WebSockets, no added libraries). It connects to `CoopRelayUrl()`: its own
+relay (`http://127.0.0.1:<relay_port>`) when it hosts one, else
+`relay_url` (the host's Tailscale address). It creates or joins a
+session, or joins a pairing room, sends queued binary frames, pings every
+10 s, treats 30 s of silence as a dead connection, and reconnects with
+backoff (1, 2, 4, 8, 16, then 30 s). A `404` ends a session by code
+instead of retrying; a bad code fails at once, and so does a full room on
+the first try (on a reconnect a full room means our old socket hasn't
+timed out yet, so it keeps trying). The rest of WASD reads
+`TakeEvents()` (connected, partner joined/left, frame, disconnected,
+ended, failed) and `Status()` (state, code, paired, partner, frame and
+byte counts, reconnects); nothing received does anything but queue an
+event. `wasd-cli relay create|<code>|pair:<key> [--url URL] [--send HEX]`
+drives it from the command line.
+
+### Setting it up with Tailscale
+
+Once, on both PCs: install Tailscale and sign in. The host shares their
+PC with the partner (Tailscale's admin console: the PC's **⋯** menu,
+**Share**, send the link; the partner accepts it).
+
+- **The host**: in WASD's co-op popover, **Host the relay here** (or
+  `host_relay=1` in `settings.ini`), then, once, **Forward it with
+  Tailscale**: WASD runs `tailscale serve --bg --tcp 8790
+  tcp://localhost:8790` (as the user; no admin needed), the same command
+  the popover shows to run by hand. Tailscale forwards that port of the
+  host's Tailscale address to the relay and keeps doing so after restarts.
+  The same button then reads **Stop forwarding with Tailscale** (`tailscale
+  serve --tcp=8790 off`). Stopping hosting in WASD leaves the forward; with
+  nothing listening it only refuses connections.
+- **The partner**: pastes the `relay_url=...` line the host copies into
+  their co-op popover's address field (**Save**, or Enter; `POST
+  /api/coop/relay?url=...`). It's saved as `relay_url` and the session
+  starts over on it at once, no restart. The field also takes just the
+  host's Tailscale name (`my-pc.tail1234.ts.net`) or `100.x.y.z` address:
+  no scheme means `http://`, and an `http://` address without a port gets
+  the relay's, 8790 (`NormalizeRelayInput`). Editing `relay_url` in
+  `settings.ini` still works too.
+
+While hosting, the popover reads Tailscale (`src/core/tailscale.cpp`:
+`tailscale status --json` and `tailscale serve status --json`, at once
+and then every 30 s, on the session thread) and shows the one step still
+missing: install Tailscale, turn it on, or forward the relay's port
+(**Forward it with Tailscale**, `POST /api/coop/forward`, run on the
+session thread, or the command to run by hand); once it forwards, the
+partner's exact `relay_url` line, each with **Copy**, and the button to
+stop forwarding (`POST /api/coop/forward?on=0`). If `tailscale serve`
+fails, its first line (and any link Tailscale wants opened, e.g. to allow
+Serve on the tailnet) is shown until the next click. Adding or removing
+the forward is the only change WASD makes to Tailscale, and only on those
+clicks. `/api/state`'s
+`coop.host.tailscale` (`installed`, `running`, `name`, `ip`, `serving`,
+`forwardError`; `null` until read) carries it.
+
+Then both set the same Seamless Co-op password and pair automatically,
+or the host creates a session and sends the code. Never point Tailscale
+at the live page's port: its API (quitting the app, settings) is for
+this PC only.
+
+Checked on one PC with Tailscale 1.104 (`tests/relay/tailscale.test.mjs`,
+opt-in): the forward carries WinHTTP's WebSockets, a guide reaching the
+relay only through the Tailscale name pairs by password with one hosting
+it, they pair again after the host restarts, and state crosses; the relay
+refuses the PC's LAN address.
+
+Over it, `CoopLink` (`src/ds3/coop_link.cpp`) runs the live co-op link:
+at the polling rate it hands our `SharedGameState` to `CoopSync`
+(`src/ds3/coop_sync.cpp`, no network in it), which sends a full
+snapshot whenever the link is new (connected, reconnected, a new
+partner, a request), a delta when something changed, and nothing when
+nothing did; and it applies the partner's packets to their state, kept
+apart from ours. The packets are under "The live link" below. Another
+protocol version: nothing is applied and the link closes. Logged:
+snapshots sent and received, requests, rejected packets, a version
+mismatch; never the deltas. `wasd-cli relay create|<code> --sync
+[--still] [--name N]` runs a link for a made-up character (HP draining,
+walking, finding pickups; `--still` keeps it unchanged) and prints the
+partner's state as it changes, so two copies can be tried on one PC.
+
+### The co-op session on the live page
+
+The live page's **Co-op ▾** pill opens the session popover: **Create
+session** (shows a 6-character code to send your partner), or a code
+and **Join**; then the partner's name, the last change, the relay round
+trip, updates per second, the protocol, and **Disconnect**.
+`CoopSession` (`src/ds3/coop_session.cpp`) runs it on its own thread,
+which owns the `CoopLink`: every 100 ms it ticks the link with your
+`SharedGameState` (once a character has been read; before that it
+sends nothing), keeps the partner's last 30 s of positions (a point per
+half metre, at most 300), and copies each new partner state to the
+results page's partner (`/api/coop` then says `"live": true`; a pasted
+code still loads, until the next live update). While a session runs,
+your flag sets are read every 5 s even with no page open, so your
+partner gets them. The page server only queues `create`, `join`,
+`leave` and `pair` and reads what the thread last published, so a slow
+relay never holds up a page request.
+
+**Auto pairing.** Both players already share Seamless Co-op's session
+password (`cooppassword` under `[PASSWORD]` in
+`<game_dir>\SeamlessCoop\ds3sc_settings.ini`). With no session running
+and `auto_pair=1` (the default), the session thread reads it every 5 s
+(`SeamlessPasswordFromIni`) and joins the pairing room
+`/pair/<CoopPairKey>`: the hex SHA-256 of `wasd-coop-pair-1\n` and the
+password. Two copies with the same password and relay meet there with no
+code. The password never leaves the PC; the relay sees only the hash, and
+the log only its first 8 digits. A pairing room waits for the partner
+however long they're away (no 5-minute limit). A changed password moves
+to the new room within 5 s. **Disconnect**, or a session by code, pauses
+auto pairing until **Pair automatically** (`do=pair`) or the next start;
+a pairing room that ended on an error (another protocol version, a full
+room) is tried again after a minute. Strangers with the same password
+can't collide: the relay is only reachable over the host's own Tailscale
+network.
+
+What the page is told (`DeriveCoopSession`, from the relay's status):
+`none`, `creating` (no code yet), `hosting` (your code, no partner
+yet), `joining` (their code, not in yet), `pairing` (the pairing room,
+no partner yet), `connected`, or `reconnecting` (after you were paired,
+the partner or you dropped: their last values stay, dimmed, counting
+up). A session ends (`CoopSessionEndFor`) when the relay ends or refuses
+it, on another protocol version, or, for a session by code, once the
+partner has been gone 5 minutes; the reason stays as `error` until the
+next start or leave: `wrong-code` (not a session code, or no such
+session), `room-full`, `version` (with both protocol numbers), `relay`
+(unreachable; while joining the client keeps retrying), `ended`, or
+`no-relay` (not hosting, and `relay_url` isn't set).
+
+`/api/state`'s `coop` (`CoopLiveJson`): `relay` (one to connect to or
+not), `host` (`on`, `running`, `port`, `error`: hosting the relay here),
+`relayUrl` (when not hosting), `pair` (`available`: a Seamless password
+was found; `paused`), `state`, `error`, `errorText`, `code`, `paired`,
+`openSeconds`, `goneSeconds`, `rttMs` (to
+the relay, from the heartbeat's ping and pong; the first ping goes on
+connecting), `lastChangeMs`, `updatesPerSecond`, `protocol`,
+`partnerProtocol`, and `partner`: `null` until a partner has been here,
+then `here`, `have` and, once their state has arrived, `name`, `level`,
+`ng`, `hp`, `fp`, `stamina`, `deaths`, `place`, `sameMap`, `pose`,
+`trail`, `itemsHere`, `bosses`. The spoiler rules are the results
+page's: `place` (`area`, `region`, `bonfire`, `elsewhere`, `beyond`)
+goes through `CoopPlaceView`, so it's named at Full or when you've been
+there, "a new area beyond ..." at Category, and only `elsewhere`
+otherwise; `pose` and `trail` only when they're in your map section;
+`itemsHere` (their pickups found in the area you're in) only when their
+pickup list matches yours; `bosses` (the defeat flags of the bosses
+they've killed) only when their boss list does.
+
+On the page (`coopView`, `coopPopView`, `coopError` in
+`templates/live.html`): a partner strip under the header (Bonfire),
+under the vitals (Ledger) or a card between Character and Gear
+(Cartographer) with their name, level, HP, FP, stamina, area and the
+link's status; their arrow and path on your map when they're in your
+map section, otherwise a chip saying where they are; their item count
+for your area; `· Name ✓` on the bosses they've defeated and their
+count in the Bosses meta; Deaths as yours / theirs. The strip exists
+from Create on, with placeholders until the partner arrives, so nothing
+moves when they do.
+
+
 ## Co-op codes — built, not yet checked with a partner
 
 Two players running WASD in a Seamless Co-op session can compare their
@@ -2234,9 +2493,24 @@ games side by side. For now they swap codes by hand, on the **results
 page** (the live page's **Results** button), the only page that shows
 co-op data. Its **Co-op codes** card has **Copy my code**, a box for the
 partner's code with **Paste** (from the clipboard, or Ctrl+V in the
-box), **Load** and **Clear partner**, and a status line. A code is a
-snapshot, so to update the comparison the partner sends a new one. A
-live link is meant to carry the same packets later.
+box), **Load** and **Clear partner data**, and a status line. A code is a
+snapshot, so to update the comparison the partner sends a new one. The
+live co-op session (above) carries the same packets through the relay
+and replaces the pasted code while it runs. `relay_url` in
+`settings.ini` takes an `http://` or `https://` address, saved without
+a trailing slash; anything else is logged and ignored.
+
+- **Copy my code** stays disabled until your code is ready: your
+  character loaded and the page open a few seconds (your flags are read
+  every 5 s while a page polls). A click before then copied nothing, so
+  the clipboard kept whatever was in it, often the partner's code you'd
+  just loaded. After a copy it names the character: "Copied Ashen One's
+  code (382 characters)".
+- **Load** refuses your own code ("that's your own code (…): paste your
+  partner's"): the same name and NG cycle, no more play time than now,
+  and no pickup you haven't found (`CoopIsOwnCode`).
+- **Clear partner data** shows only once a partner is loaded, with their
+  name ("Clear Sir Partnerton's data").
 
 Once a partner's code is loaded, **Report for** offers two more
 reports, switched in place (you in cream, your partner in orchid,
@@ -2405,21 +2679,27 @@ last kept). Values wider than their field are clamped, not wrapped.
 
 ### The text form
 
-`WASD-` followed by base64url (RFC 4648 §5, no padding) of the packet
-plus its CRC-32 (the zlib one, little-endian). A full game's code is
+`WASD-` followed by base64 (RFC 4648 §4, no padding) of the packet
+plus its CRC-32 (the zlib one, little-endian). Older codes used
+base64url (`-` `_`), which the decoder still reads; it was dropped
+because Discord reads `_` as markdown, so a code pasted as a normal
+message lost its underscores. A full game's code is
 about 1,750 characters: the pickup flags, 40 sessions and the bosses.
 It's kept to 2,000 characters, one chat message (Discord's limit), by
 `FitCoopCode`: if the whole state doesn't fit, the weapons per session go
 first, then the oldest sessions, one at a time. `GET /api/coop/code`
 reports what was left out (`leftOut`) and the page says so after Copy.
-Whitespace anywhere is ignored,
-since chat apps wrap long lines. The decoder refuses each of these with
+Whitespace and backticks anywhere are ignored,
+since chat apps wrap long lines and a code block adds ```` ``` ````. The decoder refuses each of these with
 its own reason:
 
 - a missing prefix;
 - a bad character or a wrong checksum ("damaged");
 - another protocol version ("both of you need the same version");
-- an unknown or non-snapshot message type;
+- an unknown or non-snapshot message type (on the live link: an
+  unknown or unused type, a delta with no snapshot before it, an empty
+  change mask, a flag position past the end of its list, a request
+  with a payload);
 - a truncated payload, extra bytes or set padding bits;
 - a name longer than 48 bytes or with control characters;
 - a position that isn't a finite number;
@@ -2428,6 +2708,44 @@ its own reason:
 - a packet over 2,048 bytes.
 
 `wasd-cli.exe coop <code>` prints what a code holds.
+
+### The live link
+
+On the relay the same packets travel as binary WebSocket frames, one
+packet each, with no checksum or base64 (the WebSocket and TLS carry
+them intact). A code only ever holds a `FullSnapshot`; the link also
+uses two message types, in protocol 1:
+
+- **`Delta` (3):** what changed since the packet before it. Payload,
+  bit-packed like a snapshot's: a change mask (16 bits), then for each
+  set bit, in bit order: 0 captured at (32); 1 soul level (16) and the
+  nine attributes (8 each); 2 HP, max HP (16 each); 3 FP, max FP; 4
+  stamina, max stamina; 5 souls held (32); 6 deaths (32); 7 play time
+  in seconds (32); 8 NG cycle (8); 9 map id, play region id (32 each);
+  10 last bonfire id (32); 11 position known (1) and, if set, x, y, z,
+  facing (f32); 12-15 the four flag sets in snapshot order: a count
+  (12), then that many positions (12 bits each), each one flipped.
+  Then zero bits to the byte boundary. The mask is never 0.
+- **`RequestFullSnapshot` (5):** no payload, sequence 0: "send me
+  everything".
+
+Everything else in the state (the name, the flag lists themselves,
+areas, levels, totals, sessions, records) changes rarely and goes as a
+`FullSnapshot`, fitted like a code (`FitCoopCode`). So does a delta
+that would be over 2,048 bytes. The clock fields (captured at, play
+time) tick every second, so on their own they're sent once a minute;
+otherwise they go along with a real change. Moving or fighting, a
+delta is typically 10 to 40 bytes, up to 10 a second; standing still,
+nothing at all.
+
+**Sequence numbers** count each sender's state packets. A
+`FullSnapshot` always applies (the partner may have restarted at 1); a
+`Delta` only on exactly the packet before it (sequence + 1). A
+duplicate or older one is ignored; a gap, or a delta that doesn't
+decode, drops the partner's state and sends one `RequestFullSnapshot`
+until a snapshot arrives. `Hello`, `Heartbeat` and `Disconnect` (1, 4,
+6) aren't used: the relay's own heartbeat and partner notices cover
+them.
 
 ### Adding a field
 

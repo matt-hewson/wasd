@@ -23,6 +23,7 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from test_static import version_h  # noqa: E402
+from tmpdirs import remove_tree  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.path.join(ROOT, "build", "WASD.exe")
@@ -70,7 +71,7 @@ class SmokeTest(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertRegex(out, r"(?m)^ok\s+assets found")
         finally:
-            shutil.rmtree(tmp, ignore_errors=True)
+            remove_tree(tmp)
 
 
 @unittest.skipUnless(os.name == "nt" and os.path.exists(APP), "needs build\\WASD.exe on Windows")
@@ -85,7 +86,7 @@ class RunningAppTest(unittest.TestCase):
         if self.proc and self.proc.poll() is None:
             self.proc.kill()
             self.proc.wait(timeout=10)
-        shutil.rmtree(self.user, ignore_errors=True)
+        remove_tree(self.user)
 
     def start(self):
         return subprocess.Popen([APP], env=self.env)

@@ -11,9 +11,10 @@
 #      and v<version> not already tagged (so there's one file per version).
 #   2. Release build into build\release (build\ and its tracked exes are left alone),
 #      and the bundled Python (tools\fetch_python.ps1).
-#   3. Every test suite: the default run; -Only pkg with WASD_BIN_DIR=build\release,
-#      so the exe checks and the full installer cycle run on the binaries being
-#      shipped; -Only realdata (skipped by itself when the game isn't installed).
+#   3. Every test suite: the default run; -Only pkg and -Only relay with
+#      WASD_BIN_DIR=build\release, so the exe checks, the full installer cycle and
+#      the co-op relay and session tests run on the binaries being shipped;
+#      -Only realdata (skipped by itself when the game isn't installed).
 #   4. The installer from build\release, then its SHA-256 file, checked against it.
 #   5. Prints the git tag and push commands. It never tags or pushes by itself.
 #
@@ -88,6 +89,9 @@ if (-not $SkipTests) {
     try {
         Invoke-Step "Tests: exe checks and installer cycle on the release binaries" {
             & powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1 -Only pkg | Out-Host
+        }
+        Invoke-Step "Tests: co-op relay and sessions on the release binaries" {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File .\test.ps1 -Only relay | Out-Host
         }
     } finally {
         Remove-Item Env:\WASD_BIN_DIR -ErrorAction SilentlyContinue

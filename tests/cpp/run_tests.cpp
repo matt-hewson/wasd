@@ -1,6 +1,7 @@
-// C++ test runner. Builds src/main.cpp without its entry point (DS3_NO_MAIN)
-// plus every test file below into one program -- main.cpp defines
-// everything at file scope, so it can only be compiled once per binary.
+// C++ test runner. Builds src/main.cpp (with every part it includes from
+// src/core and src/ds3) without its entry point (DS3_NO_MAIN) plus every
+// test file below into one program -- the code defines everything at file
+// scope, so it can only be compiled once per binary.
 // Built and run by test.ps1:
 //
 //   build\wasd-tests.exe            every test
@@ -19,12 +20,17 @@
 
 #include "test_app.cpp"
 #include "test_coop.cpp"
+#include "test_coop_session.cpp"
+#include "test_coop_sync.cpp"
 #include "test_data.cpp"
 #include "test_entry.cpp"
 #include "test_formulas.cpp"
 #include "test_geometry.cpp"
 #include "test_mapdata.cpp"
 #include "test_paths.cpp"
+#include "test_relay.cpp"
+#include "test_relay_server.cpp"
+#include "test_tailscale.cpp"
 #include "test_patterns.cpp"
 #include "test_route.cpp"
 #include "test_session.cpp"

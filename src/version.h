@@ -8,9 +8,9 @@
 #pragma once
 
 #define WASD_VERSION_MAJOR 0
-#define WASD_VERSION_MINOR 1
-#define WASD_VERSION_PATCH 1
-#define WASD_VERSION_STRING "0.1.1"
+#define WASD_VERSION_MINOR 2
+#define WASD_VERSION_PATCH 0
+#define WASD_VERSION_STRING "0.2.0"
 
 #define WASD_APP_NAME "WASD: World Awareness & State Display"
 #define WASD_APP_SHORT_NAME "WASD"  // folders, shortcuts, window classes: no ":" allowed in file names

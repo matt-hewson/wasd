@@ -1,6 +1,6 @@
 // Program files vs. your data: where every file
 // lives, from ResolveAppPaths (pure), plus a lint that keeps file
-// locations inside the AppPaths section of main.cpp.
+// locations inside the AppPaths section of src/core/paths.cpp.
 
 namespace paths_test {
 std::function<bool(const std::wstring&)> Existing(std::vector<std::wstring> files) {
@@ -121,12 +121,25 @@ TEST(paths_utf8_for_printing) {
   CHECK_EQ(Utf8(L""), std::string(""));
 }
 
-// Lint: outside the [AppPaths begin] ... [AppPaths end] section, main.cpp
-// may not spell out where files live -- it asks Paths(). Catches a new
-// feature writing next to the exe (Program Files) or to the old repo paths.
+// Lint: outside the [AppPaths begin] ... [AppPaths end] section, the source
+// (main.cpp and every part it includes) may not spell out where files live
+// -- it asks Paths(). Catches a new feature writing next to the exe (Program
+// Files) or to the old repo paths.
 TEST(paths_lint_file_locations_only_in_app_paths) {
-  std::string src = ReadWholeFile(Paths().assets + L"\\src\\main.cpp");
-  CHECK(!src.empty());
+  const std::wstring dir = Paths().assets + L"\\src\\";
+  std::string main = ReadWholeFile(dir + L"main.cpp"), src = main;
+  CHECK(!main.empty());
+  int parts = 0;
+  for (size_t at = main.find("#include \""); at != std::string::npos; at = main.find("#include \"", at + 1)) {
+    size_t from = at + 10, to = main.find('"', from);
+    std::string name = main.substr(from, to - from);
+    if (name.rfind("core/", 0) != 0 && name.rfind("ds3/", 0) != 0) continue;
+    std::string part = ReadWholeFile(dir + WidenUtf8(name));
+    CHECK(!part.empty());
+    src += part;
+    ++parts;
+  }
+  CHECK(parts > 0);
   size_t begin = src.find("// [AppPaths begin]"), end = src.find("// [AppPaths end]");
   CHECK(begin != std::string::npos && end != std::string::npos && begin < end);
   if (begin == std::string::npos || end == std::string::npos || begin >= end) return;

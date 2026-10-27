@@ -1,12 +1,13 @@
 # Runs every automated test. No game needed.
 #   .\test.ps1              all suites
-#   .\test.ps1 -Only cpp    one suite: cpp, js, py, pkg or realdata
+#   .\test.ps1 -Only cpp    one suite: cpp, js, py, pkg, relay or realdata
 #   .\test.ps1 -Filter route   C++ tests whose name contains "route"
 #
 # cpp: builds build\wasd-tests.exe (src\main.cpp without its entry point plus
 #      tests\cpp\*) with MSVC and runs it. Windows only.
 # js:  node --test on tests\js (the live page and results page scripts).
-# py:  python unittest on tests\py (the map-file tools).
+# py:  python unittest on tests\py (the map-file tools). Runs after pkg, so
+#      the co-op test-partner check reads the freshly built wasd-cli.exe.
 # pkg: rebuilds build\wasd-cli.exe with build.ps1 and fetches the bundled
 #      Python (tools\fetch_python.ps1: downloaded once, cached, SHA-256
 #      checked), then checks what
@@ -21,6 +22,14 @@
 #      and Start menu while it runs, and the dry run takes a minute or two.
 #      WASD_BIN_DIR points the exe checks and the cycle at another build
 #      (release.ps1 uses build\release).
+# relay: node --test on tests\relay: the co-op relay WASD hosts
+#      (build\wasd-cli.exe relay-host) with real WebSocket clients and with
+#      WASD's own client (wasd-cli.exe relay), then the live page's session
+#      and auto pairing through wasd-cli.exe overlay; about 40 s. Runs after
+#      pkg, which rebuilds that exe. WASD_BIN_DIR runs them on another build
+#      (release.ps1: build\release). With $env:WASD_TAILSCALE_RELAY set
+#      (http://<this PC's Tailscale name>:8790, that port served by
+#      `tailscale serve`), also co-op through the Tailscale address.
 # realdata: not part of "all". The bundled and the dev Python run the map
 #      extractor on your real DS3 install; the output must be identical
 #      (tests\realdata). Skipped when the game isn't found.
@@ -28,7 +37,7 @@
 # PowerShell function otherwise returns it, which would swallow the results.
 
 param(
-    [ValidateSet("all", "cpp", "js", "py", "pkg", "realdata")] [string]$Only = "all",
+    [ValidateSet("all", "cpp", "js", "py", "pkg", "relay", "realdata")] [string]$Only = "all",
     [string]$Filter = ""
 )
 
@@ -89,8 +98,17 @@ function Run-Pkg {
 
 if ($Only -in "all", "cpp") { if (-not (Run-Cpp)) { $failed += "cpp" } }
 if ($Only -in "all", "js")  { if (-not (Run-Js))  { $failed += "js" } }
-if ($Only -in "all", "py")  { if (-not (Run-Py))  { $failed += "py" } }
+# pkg before py: it rebuilds wasd-cli.exe, which a py test runs (a stale exe
+# fails it after a co-op code change).
 if ($Only -in "all", "pkg") { if (-not (Run-Pkg)) { $failed += "pkg" } }
+if ($Only -in "all", "py")  { if (-not (Run-Py))  { $failed += "py" } }
+function Run-Relay {
+    $ErrorActionPreference = "Continue"
+    Write-Host "== Relay: node --test tests\relay" -ForegroundColor Cyan
+    node --test "tests/relay/*.test.mjs" | Out-Host
+    return $LASTEXITCODE -eq 0
+}
+if ($Only -in "all", "relay") { if (-not (Run-Relay)) { $failed += "relay" } }
 function Run-RealData {
     $ErrorActionPreference = "Continue"
     & powershell -NoProfile -ExecutionPolicy Bypass -File .\tools\fetch_python.ps1 | Out-Host

@@ -73,7 +73,7 @@
         <!-- VERSION: this is the only place the version number appears. Bump it here. -->
         <a class="btn-dl" href="https://github.com/matt-hewson/wasd/releases">
           <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M4 20h16"/></svg>
-          <span style="margin:0;opacity:1"><strong>Download for Windows</strong><span>v0.1.1 · pre-release</span></span>
+          <span style="margin:0;opacity:1"><strong>Download for Windows</strong><span>v0.2.0 · pre-release</span></span>
         </a>
         <p class="dl-meta">Windows 10/11 · free · open source<br><a href="https://github.com/matt-hewson/wasd">Source on GitHub</a></p>
       </div>
@@ -81,7 +81,7 @@
       <ul class="oath" aria-label="In short">
         <li>Read-only</li>
         <li>Seamless Co-op only</li>
-        <li>Nothing leaves your PC</li>
+        <li>Nothing leaves your PC, except to your co-op partner</li>
         <li><a href="#safety">How I know</a></li>
       </ul>
 
@@ -305,7 +305,7 @@
           <li><span>Inject code into the game.<small>No DLLs, no hooks, no patches.</small></span></li>
           <li><span>Touch the game's networking.<small>It doesn't see, send or alter any online traffic.</small></span></li>
           <li><span>Run during normal online play.<small>It refuses to attach unless Seamless Co-op is running.</small></span></li>
-          <li><span>Send your data anywhere.<small>The live page is served on 127.0.0.1 only.</small></span></li>
+          <li><span>Send your data anywhere but your partner.<small>The live page is served on 127.0.0.1 only. Live co-op sends your progress to your partner's WASD and nowhere else.</small></span></li>
           <li><span>Ship any of the game's files.<small>It reads item, map and name data from your own install.</small></span></li>
         </ol>
       </div>
@@ -314,7 +314,7 @@
         <dl class="facts">
           <div><dt>Read-only</dt><dd>It opens the game process with read permission and nothing more.</dd></div>
           <div><dt>Seamless Co-op only</dt><dd>Seamless Co-op runs without anti-cheat. WASD checks for it and won't attach to normal online Dark Souls III.</dd></div>
-          <div><dt>Local only</dt><dd>Everything stays on your PC (until I build co-op partner networking, optional feature). The live page listens on 127.0.0.1, so nothing else on your network can reach it.</dd></div>
+          <div><dt>Local unless you play co-op</dt><dd>Everything stays on your PC unless you use live co-op, which sends your progress to your partner's WASD over Tailscale and keeps it nowhere else. To pair you, only a one-way hash of your Seamless Co-op password leaves your PC. The live page listens on 127.0.0.1, so nothing else on your network can reach it.</dd></div>
           <div><dt>No game files shipped</dt><dd>On first run it builds its item, map and name data from your own copy of the game.</dd></div>
           <div><dt>Open source, GPL-3.0</dt><dd>Data it shows was checked against the game, and the <a href="https://github.com/matt-hewson/wasd">technical notes</a> document how each one is read.</dd></div>
           <div><dt>An honest install</dt><dd>Installs for your Windows user only, with no admin prompt. Not code-signed yet, so SmartScreen will warn you. Each release lists a SHA-256 checksum.</dd></div>
@@ -404,8 +404,10 @@
     <div class="status-grid">
       <div>
         <h3 class="status-h">Known bugs</h3>
-        <p class="status-sub">In v0.1.1, the current release.</p>
+        <p class="status-sub">In v0.2.0, the current release.</p>
         <dl class="issues">
+          <div><dt><span>Live co-op is new and lightly tested <span class="tag">Open</span></span></dt>
+            <dd>It's been tested on one PC through Tailscale, but not yet between two real players' PCs. If something goes wrong, the log in <code>%LOCALAPPDATA%\WASD\logs</code> helps, and the six-letter session code still works as a fallback.</dd></div>
           <div><dt><span>Co-op: as the joining player, your own pickups may not show as found <span class="tag">Open</span></span></dt>
             <dd>When your partner hosts the Seamless Co-op session, your WASD may not mark the items you pick up. The host's copy is fine.</dd></div>
           <div><dt><span>Resting at the same bonfire again isn't recorded <span class="tag">Open</span></span></dt>
@@ -414,12 +416,12 @@
             <dd>The figure can go wrong once you close and reopen Dark Souls III.</dd></div>
           <div><dt><span>Updates slower and uses more CPU than it should <span class="tag">Open</span></span></dt>
             <dd>It aims for 10 updates a second with very little overhead. Right now it manages about 6, using roughly half of one CPU core.</dd></div>
-          <div class="fixed"><dt><span>Co-op codes pasted into Discord can break <span class="tag">Fixed in the next release</span></span></dt>
-            <dd>Discord's formatting eats some of the code's underscores. Until then, paste it inside a code block (three backticks either side) or send it as a .txt file.</dd></div>
-          <div class="fixed"><dt><span>Copy my code can fail without saying so <span class="tag">Fixed in the next release</span></span></dt>
-            <dd>If it does, your clipboard still holds whatever was there before, often your partner's code. Check the line under the button says "Copied".</dd></div>
-          <div class="fixed"><dt><span>Switching characters mid-session records into the first one's history <span class="tag">Fixed in the next release</span></span></dt>
-            <dd>Restart WASD after switching characters until then.</dd></div>
+          <div class="fixed"><dt><span>Co-op codes pasted into Discord could break <span class="tag">Fixed in v0.2.0</span></span></dt>
+            <dd>Discord's formatting ate some of a code's underscores. Codes now use characters Discord leaves alone.</dd></div>
+          <div class="fixed"><dt><span>Copy my code could fail without saying so <span class="tag">Fixed in v0.2.0</span></span></dt>
+            <dd>It now waits until your code is ready, and says when it's copied.</dd></div>
+          <div class="fixed"><dt><span>Switching characters mid-session recorded into the first one's history <span class="tag">Fixed in v0.2.0</span></span></dt>
+            <dd>Each character's session now goes into its own history.</dd></div>
         </dl>
         <p class="status-foot">Found another? <a href="https://github.com/matt-hewson/wasd/issues">Open an issue on GitHub</a>.</p>
       </div>
@@ -428,8 +430,6 @@
         <h3 class="status-h">Coming, not built yet</h3>
         <p class="status-sub">Planned, in no fixed order. The <a href="https://github.com/matt-hewson/wasd/blob/main/ROADMAP.md">roadmap</a> has the full list.</p>
         <dl class="coming">
-          <div class="built"><dt><span>A live link between two players <span class="tag">Built, being tested</span></span></dt>
-            <dd>Your partner's health, area and position on your map, the bosses they've beaten and the items they've found, live and at your spoiler tier. One player's WASD hosts it and Tailscale (free) connects the other: nothing hosted, no router changes.</dd></div>
           <div><dt><span>Your partner on the overlay</span></dt>
             <dd>Their health and area in the in-game overlay, not just the live page.</dd></div>
           <div><dt><span>Co-op warnings</span></dt>
@@ -461,8 +461,14 @@
     <div class="coop-copy">
       <p class="eyebrow">Co-op &amp; what's next</p>
       <h2 id="coop-title" style="margin-top:14px;font-size:clamp(36px,5vw,56px)">Playing with a friend</h2>
-      <p>Co-op is partly built. Right now you and a partner can swap a co-op code, one line of text you paste into Discord, and see both runs side by side on the results page.</p>
-      <p class="demo-code" aria-label="Example co-op code"><span>WASD-</span>AQEBAAAAxJ3kZ0Fz2wq… <span style="color:var(--muted-2)">(example)</span></p>
+      <p>New in v0.2.0: when you both run WASD, you see each other live. Your partner's health, area and position on your map, the bosses they've beaten and the items they've found.</p>
+      <p>Nothing is hosted and nothing costs money. One of you hosts the link inside WASD, and <a href="https://tailscale.com">Tailscale</a>, free for personal use, connects the other. No port forwarding, no router changes.</p>
+      <ol class="coop-steps">
+        <li><b>Both:</b> install Tailscale and sign in. The host shares their PC with the partner from Tailscale's admin console.</li>
+        <li><b>The host:</b> <b>Co-op ▾</b> → <b>Host the relay here</b> → <b>Forward it with Tailscale</b>, then send the <code>relay_url=…</code> line it shows.</li>
+        <li><b>The partner:</b> <b>Co-op ▾</b>, paste the line, <b>Save</b>.</li>
+      </ol>
+      <p>With the same Seamless Co-op password, as you use to play together, WASD pairs you by itself. Otherwise the host sends a six-letter code. You can still swap a co-op code and compare both runs side by side on the results page.</p>
       <div class="split" aria-label="Results page views"><span>You</span><span>Together</span><span>Partner</span></div>
       <p>Your partner's data follows <em>your</em> spoiler tier, so it never spoils an area you haven't reached.</p>
     </div>
@@ -472,10 +478,12 @@
       <ol class="log">
         <li class="done"><p class="when">Reached · v0.1</p><h3>Dark Souls III, solo and swapped codes</h3>
           <p>Live page, overlay, results page, spoiler tiers, missable warnings, route guidance for all 23 areas, and co-op codes.</p></li>
-        <li><p class="when">Next</p><h3>A live link between two players</h3>
-          <ul><li>Your partner's HP and area on the overlay</li><li>Shared found items</li><li>Warnings before one player locks the other out, like killing a boss mid-questline</li></ul></li>
+        <li class="done"><p class="when">Reached · v0.2</p><h3>A live link between two players</h3>
+          <p>Your partner live on the live page, over Tailscale, paired by your Seamless Co-op password.</p></li>
+        <li><p class="when">Next</p><h3>More from the live link</h3>
+          <ul><li>Your partner's health and area on the overlay</li><li>Warnings before one player locks the other out, like killing a boss mid-questline</li><li>Both players in one results page</li></ul></li>
         <li><p class="when">After that, maybe</p><h3>Elden Ring, with Seamless Co-op</h3>
-          <p>The same rules: read-only, Seamless Co-op only, nothing leaves your PC (until i build in coop partner networking).</p></li>
+          <p>The same rules: read-only, Seamless Co-op only, and nothing leaves your PC except, in co-op, to your partner.</p></li>
         <li class="later"><p class="when">Further off, perhaps</p><h3>DS Remastered, DS2, Sekiro</h3>
           <p>The order depends on what people ask for.</p></li>
       </ol>

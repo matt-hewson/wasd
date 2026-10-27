@@ -16,7 +16,7 @@ WindowSnapshot Attached() {
 }  // namespace app_test
 
 TEST(app_window_title) {
-  CHECK_EQ(MainWindowModel(WindowSnapshot{}, kMapReady, "").title, std::string("WASD 0.1.1"));
+  CHECK_EQ(MainWindowModel(WindowSnapshot{}, kMapReady, "").title, std::string("WASD 0.2.0"));
 }
 
 TEST(app_window_waiting_for_the_game) {
@@ -91,4 +91,58 @@ TEST(app_old_logs_deleted_after_seven_days) {
     CHECK_EQ(old[1], std::wstring(L"wasd-20260929.log"));
   }
   CHECK_EQ(OldLogs({L"wasd-20261226.log"}, 2027, 1, 3, 7).size(), size_t(1));  // across the new year
+}
+
+TEST(app_live_port_setting) {
+  CHECK_EQ(ParseLivePort("8765"), 8765);
+  CHECK_EQ(ParseLivePort("8865"), 8865);  // a second copy's own port
+  CHECK_EQ(ParseLivePort("1024"), 1024);
+  CHECK_EQ(ParseLivePort("65526"), 65526);  // the last ten tries still fit
+  CHECK_EQ(ParseLivePort("65527"), -1);
+  CHECK_EQ(ParseLivePort("1023"), -1);
+  CHECK_EQ(ParseLivePort(""), -1);
+  CHECK_EQ(ParseLivePort("-8765"), -1);
+  CHECK_EQ(ParseLivePort("8765 "), -1);
+  CHECK_EQ(ParseLivePort("99999999999"), -1);
+}
+
+TEST(app_relay_url_setting) {
+  std::string url = "kept";
+  CHECK(ParseRelayUrl("", &url));
+  CHECK_EQ(url, std::string(""));  // no relay
+  CHECK(ParseRelayUrl("http://localhost:8787", &url));
+  CHECK_EQ(url, std::string("http://localhost:8787"));
+  CHECK(ParseRelayUrl("https://relay.example.workers.dev/", &url));
+  CHECK_EQ(url, std::string("https://relay.example.workers.dev"));  // trailing slash dropped
+  CHECK(ParseRelayUrl("https://example.com/wasd//", &url));
+  CHECK_EQ(url, std::string("https://example.com/wasd"));
+  url = "kept";
+  for (const char* bad : {"localhost:8787", "ftp://example.com", "http://", "https:///", "http:///path",
+                          "http://exa mple.com", "ws://localhost:8787"}) {
+    CHECK(!ParseRelayUrl(bad, &url));
+    CHECK_EQ(url, std::string("kept"));  // a bad value changes nothing
+  }
+}
+
+TEST(app_relay_address_as_the_partner_pastes_it) {
+  const std::string want = "http://my-pc.tail1234.ts.net:8790";
+  CHECK_EQ(NormalizeRelayInput("relay_url=http://my-pc.tail1234.ts.net:8790"), want);  // the host's copied line
+  CHECK_EQ(NormalizeRelayInput("  RELAY_URL = http://my-pc.tail1234.ts.net:8790 \r\n"), want);
+  CHECK_EQ(NormalizeRelayInput("http://my-pc.tail1234.ts.net:8790/"), want);
+  CHECK_EQ(NormalizeRelayInput("my-pc.tail1234.ts.net"), want);  // just the name: http and the relay's port
+  CHECK_EQ(NormalizeRelayInput("HTTP://my-pc.tail1234.ts.net"), want);
+  CHECK_EQ(NormalizeRelayInput("100.101.102.103"), std::string("http://100.101.102.103:8790"));
+  CHECK_EQ(NormalizeRelayInput("100.101.102.103:9000"), std::string("http://100.101.102.103:9000"));  // a port given is kept
+  CHECK_EQ(NormalizeRelayInput("[fd7a:115c::1]"), std::string("http://[fd7a:115c::1]:8790"));
+  CHECK_EQ(NormalizeRelayInput("https://relay.example.com"), std::string("https://relay.example.com"));  // https: its own port
+  CHECK_EQ(NormalizeRelayInput("my-pc", 8791), std::string("http://my-pc:8791"));
+  for (const char* bad : {"", "   ", "relay_url=", "ws://my-pc:8790", "ftp://my-pc", "my pc", "http://"})
+    CHECK_EQ(NormalizeRelayInput(bad), std::string(""));
+}
+
+TEST(app_query_parameters_decoded) {
+  CHECK_EQ(UrlDecode("relay_url%3Dhttp%3A%2F%2Fmy-pc%3A8790"), std::string("relay_url=http://my-pc:8790"));
+  CHECK_EQ(UrlDecode("a+b%20c"), std::string("a b c"));
+  CHECK_EQ(UrlDecode("100%"), std::string("100%"));  // not an escape: kept
+  CHECK_EQ(UrlDecode("%zz"), std::string("%zz"));
 }
