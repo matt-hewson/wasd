@@ -41,14 +41,15 @@ code{color:var(--gold);background:var(--bg-3);padding:.1em .4em;border-radius:3p
 .mark svg{width:22px;height:22px}
 .top nav{margin-left:auto}
 .nav{display:flex;gap:22px;list-style:none;padding:0;margin-block:0}
-.nav a{color:var(--muted);text-decoration:none;font-size:14px}
+.nav a{color:var(--muted);text-decoration:none;font-size:14px;white-space:nowrap}
 .nav a:hover{color:var(--bright)}
 .top-dl{font:500 13px/1 var(--mono);color:var(--bg);background:var(--ember);padding:9px 12px;border-radius:3px;text-decoration:none;white-space:nowrap}
 .top-dl:hover{color:var(--bg);background:var(--gold)}
 .top-kofi{display:inline-flex;align-items:center;gap:7px;height:31px;margin-left:-14px;padding:0 11px;font:500 13px/1 var(--mono);color:var(--gold);border:1px solid var(--gold);border-radius:3px;text-decoration:none;white-space:nowrap;transition:color .2s,border-color .2s}
 .top-kofi:hover{color:var(--bright);border-color:var(--bright)}
 .top-kofi svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
-@media (max-width:1000px){.nav{display:none}}
+/* Hidden below 1110px, where the links would otherwise wrap */
+@media (max-width:1109px){.nav{display:none}}
 @media (max-width:400px){.top-kofi{padding:0 8px}.top-kofi .t{display:none}}
 
 /* Map-grid decoration */
